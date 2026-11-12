@@ -1,0 +1,22 @@
+# Podaci ne idu na git: mogu biti veliki ili poverljivi.
+# Simulirani podaci se uvek mogu ponovo napraviti komandom `python -m simulator.pokreni`.
+data/
+
+# Izolovano Python okruženje (svako ga pravi kod sebe)
+.venv/
+venv/
+
+# Fajlovi koje Python i alati sami prave
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Lozinke i podešavanja koja ne smeju na git
+.env
+*.secret
+
+# Fajlovi editora i operativnog sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

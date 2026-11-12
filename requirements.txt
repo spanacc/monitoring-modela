@@ -1,0 +1,9 @@
+# Spisak biblioteka koje projekat koristi.
+# Verzije su ograničene da bi svima radilo isto.
+
+# pydantic: proverava da li su podaci u ispravnom obliku
+# (npr. da je vreme zaista vreme, a broj zaista broj).
+pydantic>=2.7,<3
+
+# pytest: pokreće automatske provere (testove).
+pytest>=8,<10

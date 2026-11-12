@@ -1,0 +1,12 @@
+# Podešavanja projekta.
+
+[project]
+name = "monitoring-modela"
+version = "0.1.0"
+description = "Univerzalni monitoring rezultata modela (black-box)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Da testovi mogu da nađu pakete `app` i `simulator` iz glavnog foldera.
+pythonpath = ["."]
+testpaths = ["tests"]
