@@ -42,6 +42,9 @@ class Podesavanja:
     rezerva: float = 2.0
     # Koji deo podataka sa početka se smatra normalnim periodom.
     udeo_osnove: float = 0.25
+    # Ili: normalni period je prvih toliko dana. Ovo je bolje za stalan rad,
+    # jer se ne pomera kako podaci rastu. Ako je zadato, udeo_osnove se ne koristi.
+    dana_osnove: float | None = None
     # Definicija pristrasnosti: više od ovog dela greške je stalno u istom
     # smeru ("većina greške u istom smeru"). Ovo je definicija, a ne
     # procena: pristrasnost postoji od samog početka, pa nema normalnog

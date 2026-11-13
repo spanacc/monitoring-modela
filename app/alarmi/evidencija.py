@@ -5,16 +5,21 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.provere import Nalaz,Ozbiljnost
+from app.provere import Nalaz, Ozbiljnost
 
+# Redosled ozbiljnosti, da bi moglo da se kaže "kritično je gore od upozorenja".
 REDOSLED = {Ozbiljnost.INFO: 0, Ozbiljnost.UPOZORENJE: 1, Ozbiljnost.KRITICNO: 2}
 
-class StatusAlarma(str,Enum):
+
+class StatusAlarma(str, Enum):
     OTVOREN = "otvoren"
     POTVRDJEN = "potvrdjen"
-    RESEN =  "resen"
+    RESEN = "resen"
+
 
 class Alarm(BaseModel):
+    """Jedan alarm: nalaz, plus sve što treba da bi se pratio kroz vreme."""
+
     id: int
     tip: str
     model: str
@@ -30,20 +35,33 @@ class Alarm(BaseModel):
     potvrdio: str | None = None
     napomena: str | None = None
 
-class Evidencija:
 
-    def __init__(self,putanja:Path):
-        self.putanja = Path(putanja)
+class Evidencija:
+    """
+    Spisak svih alarma. Čuva se u bazi (korak 5) ili, za probu, u JSON fajlu.
+    Ostatak aplikacije ne zna gde: koristi samo ovu klasu.
+    """
+
+    def __init__(self, putanja: Path | None = None, baza=None):
+        self.putanja = Path(putanja) if putanja else None
+        self.baza = baza
         self.alarmi: list[Alarm] = []
-        if self.putanja.exists():
+        if self.baza:
+            self.alarmi = self.baza.ucitaj_alarme()
+        elif self.putanja and self.putanja.exists():
             podaci = json.loads(self.putanja.read_text(encoding="utf-8"))
             self.alarmi = [Alarm.model_validate(a) for a in podaci]
 
     def sacuvaj(self) -> None:
+        if self.baza:
+            self.baza.sacuvaj_alarme(self.alarmi)
+            return
         self.putanja.parent.mkdir(parents=True, exist_ok=True)
         podaci = [a.model_dump(mode="json") for a in self.alarmi]
         self.putanja.write_text(json.dumps(podaci, ensure_ascii=False, indent=2),
                                 encoding="utf-8")
+
+    # --- usklađivanje sa nalazima ---
 
     def uskladi(self, nalazi: list[Nalaz], sada: datetime) -> list[Alarm]:
         """

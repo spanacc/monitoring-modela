@@ -1,12 +1,14 @@
+
 import argparse
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.alarmi.evidencija import Alarm, Evidencija
 from app.alarmi.konfiguracija import Konfiguracija, ucitaj_konfiguraciju
+from app.baza import Baza
 from app.citac import ucitaj_csv
 from app.prepoznavanje import Mapiranje
 from app.provere import Nalaz, proveri_sve
@@ -16,7 +18,8 @@ from app.provere import Nalaz, proveri_sve
 class Izvestaj:
     """Šta se desilo u jednom krugu."""
 
-    rezultata: int = 0
+    novih_rezultata: int = 0  # upisano u bazu u ovom krugu
+    provereno: int = 0  # pročitano iz baze i provereno
     nalaza: int = 0
     novih_alarma: int = 0
     otvorenih_alarma: int = 0
@@ -30,28 +33,38 @@ def jedan_krug(k: Konfiguracija, sada: datetime | None = None) -> Izvestaj:
           rezultata (za simulirane podatke).
     """
     izvestaj = Izvestaj()
+    baza = Baza(k.baza)
 
-    # 1. Učitavanje. Ako jedan izvor ne valja, ostali se i dalje proveravaju.
-    rezultati = []
+    # 1. Uvoz u bazu. Ako jedan izvor ne valja, ostali se i dalje uvoze.
     for izvor in k.izvori:
         try:
             mapiranje = Mapiranje.ucitaj(izvor.mapiranje) if izvor.mapiranje else None
-            rezultati += ucitaj_csv(izvor.putanja, izvor.model, mapiranje, k.zona).rezultati
+            ucitano = ucitaj_csv(izvor.putanja, izvor.model, mapiranje, k.zona)
+            izvestaj.novih_rezultata += baza.upisi_rezultate(str(izvor.putanja), ucitano.rezultati)
         except (OSError, ValueError) as e:
             izvestaj.greske.append(f"Izvor {izvor.putanja}: {e}")
-    izvestaj.rezultata = len(rezultati)
 
-    # 2. Provere, svaki model sa svojom osetljivošću.
-    po_modelu = defaultdict(list)
-    for r in rezultati:
-        po_modelu[r.model].append(r)
+    # 2. Provere iz baze, svaki model sa svojom osetljivošću.
     nalazi: list[Nalaz] = []
-    for model, njegovi in po_modelu.items():
-        nalazi += proveri_sve(njegovi, k.podesavanja_za(model), sada)
+    for model in baza.modeli():
+        p = k.podesavanja_za(model)
+        prvo, poslednje = baza.prvo_i_poslednje(model)
+        kraj = sada or poslednje
+
+        # Čita se samo normalni period i poslednjih `dana_provere` dana.
+        pocetak = kraj - timedelta(days=k.dana_provere) if k.dana_provere else None
+        kraj_osnove = prvo + timedelta(days=p.dana_osnove) if p.dana_osnove else None
+        rezultati = baza.citaj_rezultate(model, kraj_osnove, pocetak)
+        izvestaj.provereno += len(rezultati)
+
+        njegovi = proveri_sve(rezultati, p, sada)
+        if pocetak:
+            njegovi = [n for n in njegovi if u_periodu_provere(n, pocetak)]
+        nalazi += njegovi
     izvestaj.nalaza = len(nalazi)
 
     # 3. Usklađivanje sa evidencijom.
-    evidencija = Evidencija(k.evidencija)
+    evidencija = Evidencija(baza=baza)
     izvestaj.novih_alarma = len(evidencija.uskladi(nalazi, datetime.now(timezone.utc)))
 
     # 4. Slanje. Uspešno poslati alarmi više ne čekaju.
@@ -60,6 +73,23 @@ def jedan_krug(k: Konfiguracija, sada: datetime | None = None) -> Izvestaj:
     evidencija.sacuvaj()
     izvestaj.otvorenih_alarma = len(evidencija.otvoreni())
     return izvestaj
+
+
+def u_periodu_provere(n: Nalaz, pocetak: datetime) -> bool:
+    """
+    Da li nalaz pripada periodu provere (poslednjih `dana_provere` dana).
+
+    - Problem koji se završio pre početka perioda je star. Već je prijavljen
+      ranije i čuva se u evidenciji alarma.
+    - Problem koji traje u period provere se zadržava, npr. pristrasnost,
+      koja se računa od samog početka podataka.
+    - Izuzetak je izostanak koji počinje pre perioda provere: deo između
+      normalnog perioda i perioda provere se namerno ne čita iz baze, pa bi
+      izgledao kao da rezultati nisu stizali, a to nije istina.
+    """
+    if n.do <= pocetak:
+        return False
+    return not (n.tip == "izostanak" and n.od < pocetak)
 
 
 def posalji_obavestenja(evidencija: Evidencija, k: Konfiguracija, izvestaj: Izvestaj) -> None:
@@ -109,9 +139,9 @@ def main() -> None:
         sada = datetime.now(timezone.utc) if args.sada == "trenutno" else None
         iz = jedan_krug(k, sada)
 
-        print(f"[{datetime.now():%H:%M:%S}] {iz.rezultata} rezultata, {iz.nalaza} nalaza, "
-              f"{iz.novih_alarma} novih alarma, {iz.otvorenih_alarma} otvorenih "
-              f"({time.monotonic() - pocetak:.1f} s)")
+        print(f"[{datetime.now():%H:%M:%S}] {iz.novih_rezultata} novih rezultata, "
+              f"{iz.provereno} provereno, {iz.nalaza} nalaza, {iz.novih_alarma} novih alarma, "
+              f"{iz.otvorenih_alarma} otvorenih ({time.monotonic() - pocetak:.1f} s)")
         for ime, broj in iz.poslato.items():
             print(f"    poslato na '{ime}': {broj}")
         for greska in iz.greske:

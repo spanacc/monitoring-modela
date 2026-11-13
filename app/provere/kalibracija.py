@@ -29,9 +29,13 @@ def kalibrisi(serija: list[Rezultat], p: Podesavanja) -> Granice | None:
     if korak is None:
         return None
 
-    # Normalni period: prvi `udeo_osnove` rezultata (bar 2).
-    n = max(int(len(serija) * p.udeo_osnove), 2)
-    kraj = serija[n - 1].vreme
+    if p.dana_osnove:
+        # Normalni period: prvih `dana_osnove` dana. Ne pomera se kako podaci rastu.
+        kraj = serija[0].vreme + timedelta(days=p.dana_osnove)
+    else:
+        # Normalni period: prvi `udeo_osnove` rezultata (bar 2).
+        n = max(int(len(serija) * p.udeo_osnove), 2)
+        kraj = serija[n - 1].vreme
 
     # Prozor: otprilike jedan dan rezultata, jer mnogi podaci imaju dnevni
     # ciklus, pa se tako ciklus poništi. Najmanje NAJMANJE_TACAKA rezultata.

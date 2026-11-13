@@ -9,5 +9,9 @@ pydantic>=2.7,<3
 # Mac i Linux ga već imaju, a Windowsu je potreban.
 tzdata>=2024.1
 
+# sqlalchemy: rad sa bazom podataka. Isti kod radi sa SQLite (proba)
+# i sa PostgreSQL ili drugom bazom (pravi rad), menja se samo adresa.
+sqlalchemy>=2.0,<3
+
 # pytest: pokreće automatske provere (testove).
 pytest>=8,<10

@@ -24,6 +24,7 @@ class Izvor(Strogo):
 class OsetljivostModela(Strogo):
     rezerva: float | None = None
     udeo_osnove: float | None = None
+    dana_osnove: float | None = None
     prag_pristrasnosti: float | None = None
 
 
@@ -45,7 +46,10 @@ class Kanal(Strogo):
 class Konfiguracija(Strogo):
     izvori: list[Izvor]
     zona: str = "Europe/Belgrade"
-    evidencija: Path = Path("data/alarmi.json")
+    baza: str = "sqlite:///data/monitoring.db"  # adresa baze (korak 5)
+    # Prijavljuju se samo problemi iz poslednjih toliko dana. Starije ne
+    # treba ni čitati iz baze, pa nadzor ostaje brz. None = proveri sve.
+    dana_provere: float | None = 30
     provere: OsetljivostModela = OsetljivostModela()
     modeli: dict[str, OsetljivostModela] = {}
     kanali: dict[str, Kanal] = {"ekran": Kanal(tip="ekran")}

@@ -2,13 +2,13 @@ import argparse
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.alarmi.evidencija import Evidencija, StatusAlarma
+from app.alarmi.evidencija import Evidencija
 from app.alarmi.kanali import OZNAKE
+from app.alarmi.konfiguracija import ucitaj_konfiguraciju
+from app.baza import Baza
 
-ZONA = ZoneInfo("Europe/Belgrade")
 
-
-def ispisi(evidencija: Evidencija, svi: bool) -> None:
+def ispisi(evidencija: Evidencija, svi: bool, zona: ZoneInfo) -> None:
     alarmi = evidencija.alarmi if svi else evidencija.otvoreni()
     if not alarmi:
         print("Nema otvorenih alarma." if not svi else "Nema alarma.")
@@ -16,8 +16,8 @@ def ispisi(evidencija: Evidencija, svi: bool) -> None:
     for a in alarmi:
         status = a.status.value + (f" ({a.potvrdio})" if a.potvrdio else "")
         print(f"#{a.id:<4} [{OZNAKE[a.ozbiljnost]}] {a.tip} | {a.model} / {a.izvor} | {status}")
-        print(f"      od {a.od.astimezone(ZONA):%d.%m.%Y %H:%M} "
-              f"do {a.do.astimezone(ZONA):%d.%m.%Y %H:%M}")
+        print(f"      od {a.od.astimezone(zona):%d.%m.%Y %H:%M} "
+              f"do {a.do.astimezone(zona):%d.%m.%Y %H:%M}")
         print(f"      {a.opis}")
         if a.napomena:
             print(f"      napomena: {a.napomena}")
@@ -25,7 +25,7 @@ def ispisi(evidencija: Evidencija, svi: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pregled, potvrda i rešavanje alarma.")
-    parser.add_argument("--evidencija", type=Path, default=Path("data/alarmi.json"))
+    parser.add_argument("--konfiguracija", type=Path, default=Path("konfiguracija.json"))
     komande = parser.add_subparsers(dest="komanda")
 
     lista = komande.add_parser("lista", help="prikaži alarme")
@@ -41,7 +41,11 @@ def main() -> None:
     resi.add_argument("--napomena")
 
     args = parser.parse_args()
-    evidencija = Evidencija(args.evidencija)
+    try:
+        k = ucitaj_konfiguraciju(args.konfiguracija)
+    except ValueError as e:
+        raise SystemExit(f"Greška u podešavanjima: {e}")
+    evidencija = Evidencija(baza=Baza(k.baza))
 
     try:
         if args.komanda == "potvrdi":
@@ -51,7 +55,7 @@ def main() -> None:
             a = evidencija.resi(args.id, args.napomena)
             print(f"Alarm #{a.id} je označen kao rešen.")
         else:
-            ispisi(evidencija, getattr(args, "svi", False))
+            ispisi(evidencija, getattr(args, "svi", False), ZoneInfo(k.zona))
             return
     except KeyError as e:
         raise SystemExit(e.args[0])

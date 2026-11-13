@@ -90,3 +90,16 @@ def test_granice_se_mogu_opisati_recima():
     assert "rezultati obično stižu na svakih 1 h" in redovi
     assert "izostanak: pauza duža od 2 h" in redovi
     assert any(red.startswith("drift:") for red in redovi)
+
+
+def test_fiksan_normalni_period_se_ne_pomera():
+    # Sa `dana_osnove` normalni period je prvih N dana, ma koliko podataka
+    # posle toga stiglo. Sa `udeo_osnove` bi se pomerao kako podaci rastu.
+    p = Podesavanja(dana_osnove=5)
+    kratko = kalibrisi(serija(n=300), p)
+    dugo = kalibrisi(serija(n=900), p)
+    assert kratko.kraj_osnove == dugo.kraj_osnove == T0 + timedelta(days=5)
+
+    po_udelu_kratko = kalibrisi(serija(n=300), Podesavanja())
+    po_udelu_dugo = kalibrisi(serija(n=900), Podesavanja())
+    assert po_udelu_kratko.kraj_osnove < po_udelu_dugo.kraj_osnove
