@@ -23,9 +23,10 @@ Projekat se pravi deo po deo. Svaki deo ima svoje objašnjenje u folderu
 | Korak | Šta se pravi | Status |
 | --- | --- | --- |
 | 1 | Osnova projekta, univerzalni format rezultata, simulator izmišljenih modela | gotovo |
-| 2 | Učitavanje rezultata i automatsko prepoznavanje kolona | sledeće |
-| 3 | Provere: dostupnost, kvalitet podataka, promena ponašanja, tačnost | |
-| 4 | Alarmi | |
+| 2 | Učitavanje rezultata i automatsko prepoznavanje kolona | gotovo |
+| 3 | Provere: dostupnost, kvalitet podataka, promena ponašanja, tačnost | gotovo |
+| 3b | Samopodešavanje granica (kalibracija) | gotovo |
+| 4 | Alarmi | sledeće |
 | 5 | Baza podataka | |
 | 6 | Dashboard | |
 | 7 | Bezbednost i postavljanje | |
@@ -35,10 +36,20 @@ Projekat se pravi deo po deo. Svaki deo ima svoje objašnjenje u folderu
 ```
 monitoring-modela/
 ├── app/                  # sama aplikacija
-│   └── schema.py         # univerzalni format jednog rezultata
+│   ├── schema.py         # univerzalni format jednog rezultata
+│   ├── prepoznavanje.py  # pogađa koja kolona je šta
+│   ├── citac.py          # učitava CSV fajl u univerzalni format
+│   ├── proveri.py        # proverava fajl i ispisuje probleme
+│   └── provere/          # sve provere
+│       ├── osnova.py     #   nalaz, podešavanja, granice, pomoćne funkcije
+│       ├── kalibracija.py #  sama računa granice za alarme
+│       ├── dostupnost.py #   izostanak, duplikat, greška modela
+│       ├── kvalitet.py   #   prazne i nemoguće vrednosti
+│       └── tacnost.py    #   pristrasnost, drift, skok, pad tačnosti
 ├── simulator/            # pravi izmišljene podatke za probu
 │   ├── modeli.py         # tri izmišljena modela
-│   └── pokreni.py        # pokreće simulator i čuva CSV fajlove
+│   ├── pokreni.py        # pokreće simulator i čuva CSV fajlove
+│   └── ocena.py          # da li provere nalaze ubačene probleme
 ├── tests/                # automatske provere da kod radi
 ├── docs/koraci/          # objašnjenje svakog koraka
 ├── data/                 # podaci (ne idu na git)
@@ -71,3 +82,42 @@ pytest
 
 Posle koraka 4, u folderu `data/simulirano/` nalaze se CSV fajlovi sa
 izmišljenim rezultatima tri modela, koji se mogu otvoriti i u Excelu.
+
+## Učitavanje bilo kog CSV fajla
+
+```bash
+python -m app.citac data/simulirano/senzori.csv
+```
+
+Aplikacija sama prepozna koja kolona je vreme, koja izvor, a koja rezultat
+modela, i pokaže šta je prepoznala. Ako je nešto pogrešno pogodila,
+mapiranje se sačuva, ispravi u JSON fajlu i koristi dalje:
+
+```bash
+python -m app.citac fajl.csv --sacuvaj-mapiranje mapiranje.json
+# ispraviti mapiranje.json u bilo kom editoru, pa:
+python -m app.citac fajl.csv --mapiranje mapiranje.json
+```
+
+## Provera rezultata
+
+```bash
+python -m app.proveri data/simulirano/senzori.csv
+```
+
+Ispisuje pronađene probleme: izostanke, greške modela, prazne i nemoguće
+vrednosti, duplikate, pristrasnost, drift, nagle promašaje i pad tačnosti.
+
+Granice za alarme aplikacija računa sama, za svaki izvor posebno. Šta je
+naučila, i kako se menja osetljivost:
+
+```bash
+python -m app.proveri data/simulirano/senzori.csv --granice
+python -m app.proveri data/simulirano/senzori.csv --rezerva 3   # manje alarma
+```
+
+Da li provere nalaze sve probleme koje je simulator namerno ubacio:
+
+```bash
+python -m simulator.ocena
+```
