@@ -1,0 +1,36 @@
+{
+    "izvori": [
+      {"putanja": "data/simulirano/senzori.csv"},
+      {"putanja": "data/simulirano/potrosnja.csv"},
+      {"putanja": "data/simulirano/kvalitet.csv"}
+    ],
+  
+    "zona": "Europe/Belgrade",
+    "evidencija": "data/alarmi.json",
+  
+    "provere": {"rezerva": 2.0},
+    "modeli": {
+      "potrosnja": {"rezerva": 3.0}
+    },
+  
+    "kanali": {
+      "ekran":   {"tip": "ekran"},
+      "dnevnik": {"tip": "dnevnik", "putanja": "data/obavestenja.log"},
+      "mejl": {
+        "tip": "mejl",
+        "server": "smtp.firma.rs",
+        "port": 587,
+        "korisnik": "monitoring@firma.rs",
+        "lozinka_iz": "MONITORING_MEJL_LOZINKA",
+        "od": "monitoring@firma.rs",
+        "za": ["dezurni@firma.rs"]
+      },
+      "poruka": {"tip": "poruka", "adresa_iz": "MONITORING_WEBHOOK_ADRESA"}
+    },
+  
+    "slanje": {
+      "info":       ["dnevnik"],
+      "upozorenje": ["ekran", "dnevnik"],
+      "kriticno":   ["ekran", "dnevnik"]
+    }
+  }
