@@ -29,13 +29,15 @@ jasnu grešku, umesto da se pokvari kasnije, usred noći.
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from app.alarmi.kanali import DnevnikKanal, EkranKanal, MejlKanal, WebhookKanal
+from app.alarmi.mejl import MejlSaStraniceKanal, ispravna_adresa
 from app.provere import Ozbiljnost, Podesavanja
 
 
@@ -94,6 +96,61 @@ class Kanal(Strogo):
     adresa_iz: str | None = None  # IME promenljive okruženja sa adresom
 
 
+class MejlPodesavanja(Strogo):
+    """
+    Mejl sa stranice Podešavanja (korak 8). Lozinka NIJE ovde: čuva se
+    šifrovana posebno (app/tajne.py) ili u promenljivoj MONITORING_MEJL_LOZINKA.
+    """
+    ukljuceno: bool = False
+    server: str = Field("", max_length=253)
+    port: int = Field(587, ge=1, le=65535)
+    korisnik: str = Field("", max_length=254)
+    od: str = Field("", max_length=254)  # prazno = isto kao korisnik
+    za: list[str] = Field([], max_length=20)
+    odmah: bool = True  # svaki nov problem (napomene ne)
+    dnevni: bool = True  # dnevni pregled
+    dnevni_sat: str = Field("07:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    adresa_aplikacije: str | None = Field(None, max_length=300)  # link "Otvori monitoring" u mejlu
+
+    @field_validator("server")
+    @classmethod
+    def server_bez_razmaka(cls, v: str) -> str:
+        v = v.strip()
+        if v and not re.fullmatch(r"[A-Za-z0-9.-]+", v):
+            raise ValueError("Adresa servera sme da ima samo slova, brojeve, tačke i crtice (npr. smtp.gmail.com).")
+        return v
+
+    @field_validator("korisnik", "od")
+    @classmethod
+    def jedna_adresa(cls, v: str) -> str:
+        v = v.strip()
+        if v and not ispravna_adresa(v):
+            raise ValueError(f"'{v}' nije ispravna mejl adresa.")
+        return v
+
+    @field_validator("za")
+    @classmethod
+    def adrese(cls, v: list[str]) -> list[str]:
+        v = [a.strip() for a in v if a.strip()]
+        losa = [a for a in v if not ispravna_adresa(a)]
+        if losa:
+            raise ValueError(f"Nije ispravna mejl adresa: {', '.join(losa)}.")
+        return list(dict.fromkeys(v))  # bez ponavljanja
+
+    @field_validator("adresa_aplikacije")
+    @classmethod
+    def link(cls, v: str | None) -> str | None:
+        if not v or not v.strip():
+            return None
+        if not re.fullmatch(r"https?://[^\s<>\"']+", v.strip()):
+            raise ValueError("Adresa aplikacije mora da počinje sa http:// ili https://.")
+        return v.strip()
+
+
+# Ime "kanala" za mejl sa stranice (dodaje se samo, ne piše se u "slanje").
+KANAL_STRANICE = "mejl (podešavanja)"
+
+
 class Konfiguracija(Strogo):
     izvori: list[Izvor]
     zona: str = "Europe/Belgrade"
@@ -103,12 +160,15 @@ class Konfiguracija(Strogo):
     dana_provere: float | None = 30
     provere: OsetljivostModela = OsetljivostModela()
     modeli: dict[str, OsetljivostModela] = {}
+    # Probni podaci "uživo" (python -m app --demo): dopisuju se pre svakog kruga.
+    demo: bool = False
     kanali: dict[str, Kanal] = {"ekran": Kanal(tip="ekran")}
     slanje: dict[Ozbiljnost, list[str]] = {
         Ozbiljnost.INFO: [],
         Ozbiljnost.UPOZORENJE: ["ekran"],
         Ozbiljnost.KRITICNO: ["ekran"],
     }
+    mejl: MejlPodesavanja = MejlPodesavanja()  # mejl sa stranice (korak 8)
 
     @model_validator(mode="after")
     def proveri_slanje(self) -> "Konfiguracija":
@@ -139,10 +199,19 @@ class Konfiguracija(Strogo):
             vrednosti.update(self.modeli[model].model_dump(exclude_none=True))
         return Podesavanja(**vrednosti)
 
+    def kanali_za(self, ozbiljnost: Ozbiljnost) -> list[str]:
+        """Kuda ide obaveštenje: kanali iz "slanje" i, ako je uključen, mejl sa stranice."""
+        imena = list(self.slanje.get(ozbiljnost, []))
+        if self.mejl.ukljuceno and self.mejl.odmah and ozbiljnost != Ozbiljnost.INFO:
+            imena.append(KANAL_STRANICE)
+        return imena
+
     def napravi_kanal(self, ime: str):
         """Pravi kanal po imenu. Tajne čita iz promenljivih okruženja."""
-        k = self.kanali[ime]
         zona = ZoneInfo(self.zona)
+        if ime == KANAL_STRANICE:
+            return MejlSaStraniceKanal(self.mejl, zona)
+        k = self.kanali[ime]
         if k.tip == "ekran":
             return EkranKanal(zona)
         if k.tip == "dnevnik":

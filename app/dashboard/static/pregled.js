@@ -114,7 +114,7 @@ function crtajPlocice() {
         : `${nevideni} još niko nije video`;
   const pre7 = Date.now() - 7 * DAN;
   const proslo = grupisi(st.alarmi.filter((a) => a.status === "resen" && a.poslednji_put >= pre7)).length;
-  $("p-problemi-nedelja").textContent = proslo ? `prošlo samo ove nedelje: ${proslo}` : "";
+  $("p-problemi-nedelja").textContent = proslo ? `zatvoreno ove nedelje: ${proslo}` : "";
   $("p-problemi").classList.toggle("plocica--upozorenje-tiho", otvoreni.length > 0);
 }
 
@@ -450,17 +450,23 @@ function crtajProbleme() {
 function karticaProblema(grupa) {
   const a = grupa[0];
   const izvori = grupa.length > 1 ? `${a.model} · ${grupa.length} izvora` : gde(a.model, a.izvor);
+  const prikazi = (tekst) => h("button", { type: "button", class: "veza", onclick: () => izaberi(a.model, a.izvor, a) }, tekst);
+  const resio = () => h("button", { type: "button", class: "dugme dugme--tiho dugme--malo",
+    onclick: (e) => resioSam(grupa, e.currentTarget) }, "Rešio sam");
   let dno;
   if (a.status === "otvoren") {
     dno = h("div", { class: "kartica__dno" },
       h("button", { type: "button", class: a.ozbiljnost === "info" ? "dugme dugme--tiho dugme--malo" : "dugme dugme--malo",
         onclick: (e) => videoSam(grupa, e.currentTarget) }, "Video sam"),
-      h("button", { type: "button", class: "veza", onclick: () => izaberi(a.model, a.izvor, a) }, "Prikaži na grafikonu"));
+      resio(), prikazi("Prikaži na grafikonu"));
+  } else if (a.status === "potvrdjen") {
+    dno = h("div", { class: "kartica__dno" },
+      h("span", { class: "slabo" }, `Video ${a.potvrdio}, ${vreme(a.poslednji_put)}.`), resio(), prikazi("Prikaži"));
   } else {
-    const tekst = a.status === "potvrdjen" ? `Video ${a.potvrdio}, ${vreme(a.poslednji_put)}.`
-      : a.napomena === "Prestalo samo." ? `Prošlo samo${a.potvrdio ? `. Video ${a.potvrdio}` : ""}.` : "Rešeno.";
-    dno = h("div", { class: "kartica__dno" }, h("span", { class: "slabo" }, tekst),
-      h("button", { type: "button", class: "veza", onclick: () => izaberi(a.model, a.izvor, a) }, "Prikaži"));
+    const tekst = a.napomena === "Prestalo samo." ? `Prošlo samo${a.potvrdio ? `. Video ${a.potvrdio}` : ""}.`
+      : a.potvrdio ? `Rešio ${a.potvrdio}, ${vreme(a.poslednji_put)}${a.napomena ? `: ${a.napomena}` : "."}`
+      : "Rešeno.";
+    dno = h("div", { class: "kartica__dno" }, h("span", { class: "slabo" }, tekst), prikazi("Prikaži"));
   }
   const klasa = a.status === "resen" ? "kartica kartica--proslo"
     : a.status === "potvrdjen" ? "kartica kartica--videno" : `kartica kartica--${a.ozbiljnost}`;
@@ -497,6 +503,46 @@ async function videoSam(grupa, dugme) {
   dugme.disabled = true;
   try {
     for (const a of grupa) await api(`/api/alarmi/${a.id}/potvrdi`, { ko: ime, napomena: null });
+    await osvezi();
+  } catch (e) {
+    dugme.disabled = false;
+    obavesti(e.message, true);
+  }
+}
+
+/** "Rešio sam": ime (ako se još ne zna) i kratko šta je urađeno, pa se problem zatvara. */
+function trazenjeResenja(grupa) {
+  return new Promise((resolve) => {
+    const dij = $("dijalog-resi");
+    const a = grupa[0];
+    const ime = seti("ime", "");
+    $("resi-uvod").textContent = `${a.naziv} · ${grupa.length > 1 ? `${a.model}, ${grupa.length} izvora` : gde(a.model, a.izvor)}`;
+    $("resi-ime-polje").hidden = Boolean(ime);
+    $("resi-ime").required = !ime;
+    $("resi-ime").value = ime;
+    $("resi-napomena").value = "";
+    const gotovo = (vrednost) => { dij.close(); resolve(vrednost); };
+    $("resi-forma").onsubmit = (e) => {
+      e.preventDefault();
+      const ko = $("resi-ime").value.trim();
+      if (!ko) return;
+      gotovo({ ko, napomena: $("resi-napomena").value.trim() || null });
+    };
+    $("resi-odustani").onclick = () => gotovo(null);
+    dij.oncancel = () => resolve(null);
+    dij.showModal();
+    (ime ? $("resi-napomena") : $("resi-ime")).focus();
+  });
+}
+
+async function resioSam(grupa, dugme) {
+  const odgovor = await trazenjeResenja(grupa);
+  if (!odgovor) return;
+  zapamti("ime", odgovor.ko);
+  dugme.disabled = true;
+  try {
+    for (const a of grupa) await api(`/api/alarmi/${a.id}/resi`, odgovor);
+    obavesti("Problem je zatvoren.");
     await osvezi();
   } catch (e) {
     dugme.disabled = false;

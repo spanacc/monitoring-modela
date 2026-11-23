@@ -416,6 +416,8 @@ code { font: 13px var(--mono); }
 .dijalog__uvod { margin: 4px 0 14px; color: var(--tekst-2); font-size: 14.5px; }
 .dijalog__uvod strong { color: var(--tekst); }
 .dijalog__napomena { margin-top: 8px; color: var(--tekst-3); font-size: 13px; }
+.dijalog__sadrzaj .polje + .polje { margin-top: 12px; }
+.polje textarea { resize: vertical; font: inherit; }
 .dijalog__cekanje { margin: 28px 0; color: var(--tekst-2); text-align: center; }
 .dijalog__greska {
   margin: 0 0 14px; padding: 10px 14px;
@@ -502,3 +504,44 @@ code { font: 13px var(--mono); }
   .problemi { position: sticky; top: 16px; display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
   #lista-problema { overflow-y: auto; min-height: 0; padding-bottom: 4px; }
 }
+
+/* ---------- mejl (podešavanja) ---------- */
+
+.prekidac { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.prekidac input { width: 18px; height: 18px; accent-color: var(--plava); }
+.mejl { display: grid; gap: 14px; padding: 4px 20px 20px; }
+.mejl__greska {
+  padding: 10px 14px;
+  border: 1px solid var(--crvena-ivica); border-radius: 10px;
+  background: var(--crvena-svetla);
+  font-size: 14px;
+}
+.mejl__deo { display: grid; gap: 10px; margin: 0; padding: 12px 14px 14px; border: 1px solid var(--ivica); border-radius: 10px; }
+.mejl__deo legend { padding: 0 4px; color: var(--tekst-2); font-size: 13px; }
+.mejl__red { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
+.mejl__sat { margin-left: 6px; padding: 4px 8px; border: 1px solid var(--ivica); border-radius: 8px; background: var(--kartica); }
+.mejl__brzo { margin-top: -2px; }
+.mejl__dugmad { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.mejl__pomoc { color: var(--tekst-2); font-size: 13.5px; }
+.mejl__pomoc summary { cursor: pointer; color: var(--plava); }
+.mejl__pomoc ol { margin: 8px 0; padding-left: 20px; }
+.mejl__pomoc li + li { margin-top: 4px; }
+.kvadratic { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 14px; }
+.kvadratic input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--plava); }
+.polje textarea, .polje input[type="email"], .polje input[type="password"], .polje input[type="number"], .polje input[type="url"] {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--ivica); border-radius: 8px;
+  background: var(--kartica);
+  font-size: 14px;
+  resize: vertical;
+}
+@media (max-width: 760px) {
+  .mejl { padding: 4px 12px 16px; }
+  .mejl__red { grid-template-columns: 1fr 90px; }
+}
+
+/* ---------- probni problem (samo uz --demo) ---------- */
+
+.demo__red { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.demo__red select { flex: 1 1 240px; }

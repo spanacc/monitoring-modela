@@ -24,3 +24,10 @@ uvicorn>=0.30,<1
 
 # httpx: potreban testovima, da "glume" pregledač koji pita server.
 httpx>=0.27,<1
+
+# cryptography: šifrovanje lozinke za mejl (korak 8).
+cryptography>=42
+
+# certifi: spisak sertifikata (kao u pregledačima), da bi se proverilo da je
+# mejl server pravi. Python sa python.org na Macu sam nema taj spisak.
+certifi>=2024.2

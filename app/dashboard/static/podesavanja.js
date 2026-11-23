@@ -18,6 +18,7 @@ async function osvezi() {
     $("provera-opis").textContent = n
       ? `Radi sama, na svakih ${n < 120 ? `${n} s` : `${Math.round(n / 60)} min`}. Ovde se može pokrenuti odmah, bez čekanja.`
       : "Automatska provera nije uključena. Pokrenite je ovde.";
+    $("demo").hidden = !stanje.demo;
     crtajPracene();
   } catch (e) {
     obavesti(e.message, true);
@@ -260,8 +261,155 @@ async function proveriSada() {
 
 // ---------------------------------------------------------------------------
 
+/** Probni podaci: model "odjednom" pogreši, pa se odmah vidi alarm i mejl. */
+async function napraviProblem() {
+  const dugme = $("demo-dugme");
+  dugme.disabled = true;
+  dugme.textContent = "Pravim…";
+  try {
+    const r = await api("/api/demo/problem", { vrsta: $("demo-vrsta").value });
+    const iz = r.izvestaj;
+    const mejlGreska = iz.greske.find((g) => g.includes("mejl"));
+    let tekst = `${r.opis} Provera: ${iz.novih_alarma} ${mnozina(iz.novih_alarma, ["nov problem", "nova problema", "novih problema"])}.`;
+    if (!iz.novih_alarma) tekst += " (Isti problem je već prijavljen pre manje od 10 minuta, pa se ne šalje ponovo.)";
+    else if (mejlGreska) tekst += ` Mejl nije poslat: ${mejlGreska.split(": ").slice(1).join(": ")}`;
+    else if (iz.poslato_mejlom) tekst += " Mejl je poslat, pogledaj sanduče.";
+    else tekst += " Mejl nije poslat jer obaveštenja mejlom nisu uključena (deo ispod).";
+    $("demo-rezultat").textContent = tekst;
+    obavesti(mejlGreska ? "Problem je napravljen, ali mejl nije poslat." : "Problem je napravljen.", Boolean(mejlGreska));
+    await osvezi();
+  } catch (e) {
+    obavesti(e.message, true);
+  } finally {
+    dugme.disabled = false;
+    dugme.textContent = "Napravi problem sada";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Obaveštenja mejlom
+// ---------------------------------------------------------------------------
+
+/** Popunjava formu iz podešavanja. Lozinka nikad ne stiže sa servera, samo da li postoji. */
+function popuniMejl(m) {
+  $("mejl-ukljuceno").checked = m.ukljuceno;
+  $("mejl-odmah").checked = m.odmah;
+  $("mejl-dnevni").checked = m.dnevni;
+  $("mejl-sat").value = m.dnevni_sat;
+  $("mejl-za").value = m.za.join("\n");
+  $("mejl-server").value = m.server;
+  $("mejl-port").value = m.port;
+  $("mejl-korisnik").value = m.korisnik;
+  $("mejl-adresa").value = m.adresa_aplikacije ?? "";
+  $("mejl-lozinka").value = "";
+  $("mejl-lozinka").placeholder = m.lozinka_sacuvana ? "••••••••  (sačuvana; prazno = ostaje ista)" : "";
+  const opis = $("mejl-lozinka-opis");
+  if (m.lozinka_iz_okruzenja) {
+    opis.replaceChildren("Lozinka se uzima iz promenljive okruženja MONITORING_MEJL_LOZINKA (ima prednost).");
+  } else if (m.lozinka_sacuvana) {
+    opis.replaceChildren("Lozinka je sačuvana šifrovana i ne prikazuje se. ",
+      h("button", { type: "button", class: "veza", onclick: zaboraviLozinku }, "Zaboravi lozinku"));
+  } else {
+    opis.replaceChildren("Čuva se šifrovana, samo na ovom računaru, i posle se više ne prikazuje.");
+  }
+  let stanje;
+  if (!m.ukljuceno) stanje = "Isključeno. Problemi se vide samo na stranici.";
+  else {
+    const sta = [m.odmah ? "odmah za nove probleme" : null, m.dnevni ? `dnevni pregled u ${m.dnevni_sat}` : null].filter(Boolean);
+    stanje = `Uključeno: ${sta.join(" i ") || "ništa nije izabrano"}, na ${m.za.length} ${mnozina(m.za.length, ["adresu", "adrese", "adresa"])}.`;
+    if (m.dnevni_poslat) {
+      const [d, v] = m.dnevni_poslat.split("T");
+      stanje += ` Poslednji dnevni pregled: ${d.split("-").reverse().join(".")}.${v ? ` u ${v.slice(0, 5)}` : ""}.`;
+    }
+  }
+  $("mejl-stanje").textContent = stanje;
+  const g = $("mejl-greska");
+  g.hidden = !m.greska;
+  g.textContent = m.greska ? `Poslednje slanje nije uspelo: ${m.greska}` : "";
+}
+
+function izForme() {
+  return {
+    ukljuceno: $("mejl-ukljuceno").checked,
+    odmah: $("mejl-odmah").checked,
+    dnevni: $("mejl-dnevni").checked,
+    dnevni_sat: $("mejl-sat").value || "07:30",
+    za: $("mejl-za").value.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean),
+    server: $("mejl-server").value.trim(),
+    port: Number($("mejl-port").value) || 587,
+    korisnik: $("mejl-korisnik").value.trim(),
+    od: "",
+    adresa_aplikacije: $("mejl-adresa").value.trim() || null,
+    lozinka: $("mejl-lozinka").value || null,
+  };
+}
+
+async function sacuvajMejl() {
+  const m = await api("/api/mejl", izForme());
+  popuniMejl(m);
+  return m;
+}
+
+async function zaboraviLozinku() {
+  if (!confirm("Obrisati sačuvanu lozinku? Mejlovi neće moći da se šalju dok se ne upiše nova.")) return;
+  try {
+    popuniMejl(await api("/api/mejl/lozinka", null, "DELETE"));
+    obavesti("Lozinka je obrisana.");
+  } catch (e) {
+    obavesti(e.message, true);
+  }
+}
+
+function pokreniMejl() {
+  $("mejl-gmail").addEventListener("click", () => { $("mejl-server").value = "smtp.gmail.com"; $("mejl-port").value = 587; $("mejl-korisnik").focus(); });
+  $("mejl-outlook").addEventListener("click", () => { $("mejl-server").value = "smtp.office365.com"; $("mejl-port").value = 587; $("mejl-korisnik").focus(); });
+  $("mejl-forma").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const dugme = $("mejl-sacuvaj");
+    dugme.disabled = true;
+    try {
+      await sacuvajMejl();
+      obavesti("Podešavanja mejla su sačuvana.");
+    } catch (greska) {
+      obavesti(greska.message, true);
+    } finally {
+      dugme.disabled = false;
+    }
+  });
+  // Prekidač "Uključeno" se čuva odmah, da se ne zaboravi Sačuvaj.
+  $("mejl-ukljuceno").addEventListener("change", async (e) => {
+    try {
+      await sacuvajMejl();
+      obavesti(e.target.checked ? "Mejl je uključen." : "Mejl je isključen.");
+    } catch (greska) {
+      e.target.checked = !e.target.checked;
+      obavesti(greska.message, true);
+    }
+  });
+  $("mejl-proba").addEventListener("click", async (e) => {
+    const dugme = e.currentTarget;
+    dugme.disabled = true;
+    dugme.textContent = "Šaljem…";
+    try {
+      await sacuvajMejl(); // proba ide sa onim što piše u formi
+      const r = await api("/api/mejl/proba", {});
+      obavesti(r.poruka);
+      $("mejl-greska").hidden = true;
+    } catch (greska) {
+      $("mejl-greska").hidden = false;
+      $("mejl-greska").textContent = greska.message;
+    } finally {
+      dugme.disabled = false;
+      dugme.textContent = "Pošalji probni mejl";
+    }
+  });
+}
+
 function pokreni() {
+  pokreniMejl();
+  api("/api/mejl").then(popuniMejl).catch((e) => obavesti(e.message, true));
   $("proveri").addEventListener("click", proveriSada);
+  $("demo-dugme").addEventListener("click", napraviProblem);
   $("dodaj").addEventListener("click", otvoriDodavanje);
   $("dijalog-zatvori").addEventListener("click", () => $("dijalog").close());
   osvezi();

@@ -96,6 +96,20 @@
     </form>
   </dialog>
 
+  <dialog class="dijalog dijalog--malo" id="dijalog-resi" aria-labelledby="resi-naslov">
+    <form method="dialog" class="dijalog__sadrzaj" id="resi-forma">
+      <h2 id="resi-naslov">Rešio sam</h2>
+      <p class="dijalog__uvod" id="resi-uvod"></p>
+      <label class="polje" id="resi-ime-polje"><span>Vaše ime</span><input type="text" id="resi-ime" maxlength="100" autocomplete="name"></label>
+      <label class="polje"><span>Šta je urađeno? <span class="slabo">(nije obavezno)</span></span><textarea id="resi-napomena" rows="3" maxlength="500" placeholder="npr. zamenjen senzor, ponovo pokrenut model"></textarea></label>
+      <p class="dijalog__napomena">Ako se problem nastavi, ponovo će se otvoriti i stići će mejl.</p>
+      <div class="dijalog__dugmad">
+        <button type="button" class="dugme dugme--tiho" id="resi-odustani">Odustani</button>
+        <button type="submit" class="dugme">Zatvori problem</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="oblacic" id="tooltip" role="tooltip" hidden></div>
   <div class="obavestenje" id="obavestenje" role="status" aria-live="polite" hidden></div>
 </body>

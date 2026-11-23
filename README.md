@@ -31,7 +31,9 @@ Projekat se pravi deo po deo. Svaki deo ima svoje objašnjenje u folderu
 | 6 | Dashboard | gotovo |
 | 6b | Test na pravim podacima (SKAB): široke tabele, merenja svake sekunde | gotovo |
 | 7 | Jednostavna verzija: semafor, problemi običnim rečima, podaci se dodaju na stranici | gotovo |
-| 8 | Bezbednost i postavljanje | sledeće |
+| 8 | Obaveštenja mejlom: odmah za nove probleme i dnevni pregled | gotovo |
+| 8b | Probni podaci uživo, dugme „Rešio sam“ | gotovo |
+| 9 | Prijava, uloge i postavljanje na server | sledeće |
 
 ## Struktura foldera
 
@@ -44,6 +46,7 @@ monitoring-modela/
 │   ├── citac.py          # učitava CSV fajl u univerzalni format
 │   ├── proveri.py        # proverava fajl i ispisuje probleme
 │   ├── dodavanje.py      # dodavanje podataka sa stranice: predlog kolona
+│   ├── tajne.py          # šifrovano čuvanje lozinke za mejl
 │   ├── nadzor.py         # krug nadzora: učitaj, proveri, javi alarme
 │   ├── baza.py           # baza podataka: rezultati i alarmi
 │   ├── dashboard/        # stranica u pregledaču i njen server
@@ -60,6 +63,7 @@ monitoring-modela/
 │   └── alarmi/           # alarmi i obaveštenja
 │       ├── evidencija.py     # jedan problem = jedan alarm
 │       ├── kanali.py         # ekran, dnevnik, mejl, poruka
+│       ├── mejl.py           # izgled i bezbedno slanje mejla, dnevni pregled
 │       ├── konfiguracija.py  # podešavanja iz JSON fajla
 │       └── __main__.py       # pregled, potvrda i rešavanje alarma
 ├── simulator/            # pravi izmišljene podatke za probu
@@ -100,7 +104,17 @@ pokaže šta je prepoznala, čovek potvrdi. Od tada radi sama: proverava na
 svakih 60 s i prikazuje probleme običnim rečima. Detalji:
 `docs/koraci/07-jednostavna-verzija.md`.
 
-Za probu bez pravog modela, izmišljeni podaci:
+Za probu bez pravog modela, najlakše je sa probnim podacima „uživo“:
+
+```bash
+python -m app --demo
+```
+
+Tri izmišljena modela rade od 1. novembra i dopisuju nove rezultate dok
+aplikacija radi, sa nekoliko ubačenih problema. Gase se sa
+`python -m app --bez-demoa`. Detalji: `docs/koraci/08b-probni-podaci.md`.
+
+Stariji način, fajlovi koji se ne dopunjavaju:
 
 ```bash
 python -m simulator.pokreni
@@ -204,7 +218,15 @@ python -m app.dashboard --nadzor 60
 ```
 
 Dashboard podrazumevano vidi samo ovaj računar (još nema prijavu korisnika;
-dolazi u koraku 8). Detalji: `docs/koraci/06-dashboard.md`.
+dolazi u koraku 9). Detalji: `docs/koraci/06-dashboard.md`.
+
+## Obaveštenja mejlom
+
+Podešavanja (zupčanik) → **Obaveštenja mejlom**: primaoci, nalog sa koga se
+šalje i šta se šalje (odmah za nove probleme, dnevni pregled u zadato vreme).
+Dugme **Pošalji probni mejl** proverava da li sve radi. Lozinka se čuva
+šifrovana i više se ne prikazuje. Detalji i bezbednost:
+`docs/koraci/08-mejl.md`.
 
 ## Test na pravim podacima
 

@@ -15,12 +15,16 @@ ADRESE (API)
     GET  /api/serija?model=..&izvor=..     grafikoni jednog izvora
     GET  /api/alarmi?svi=false             spisak alarma
     POST /api/alarmi/{broj}/potvrdi        {"ko": "Veljko", "napomena": "..."}
-    POST /api/alarmi/{broj}/resi           {"napomena": "..."}
+    POST /api/alarmi/{broj}/resi           {"ko": "Veljko", "napomena": "..."}
     POST /api/nadzor                       jedan krug nadzora, odmah
     GET  /api/izvori                       šta se prati (iz podešavanja)
     POST /api/izvori/predlog               ubačen fajl ili {"putanja"}: šta je prepoznato
     POST /api/izvori                       dodaj izvor (potvrđen predlog) i odmah proveri
     DELETE /api/izvori/{model}             ukloni izvor i njegove podatke
+    GET  /api/mejl                         podešavanja mejla (lozinka NIKAD)
+    POST /api/mejl                         sačuvaj podešavanja (+ nova lozinka, ako je upisana)
+    DELETE /api/mejl/lozinka               zaboravi sačuvanu lozinku
+    POST /api/mejl/proba                   pošalji probni mejl odmah
 
 DODAVANJE PODATAKA SA STRANICE (korak 7)
 ----------------------------------------
@@ -36,7 +40,7 @@ odgovore (keš) dok se verzija ne promeni, pa ni deset otvorenih
 dashboarda ne opterećuje bazu deset puta više. Odgovori se šalju
 sažeti (gzip).
 
-BEZBEDNOST (osnovna; potpuna, sa prijavom, dolazi u koraku 8)
+BEZBEDNOST (osnovna; potpuna, sa prijavom, dolazi u koraku 9)
 -------------------------------------------------------------
 - Podrazumevano server sluša samo na 127.0.0.1: dashboard može da otvori
   samo ovaj računar, ne i drugi u mreži.
@@ -52,7 +56,7 @@ BEZBEDNOST (osnovna; potpuna, sa prijavom, dolazi u koraku 8)
   svoja podešavanja (kad se izvor doda sa stranice).
 - Adresa /api/izvori/predlog sa {"putanja"} čita fajl sa ovog računara koji
   korisnik navede. Zato dashboard mora da ostane samo za ovaj računar dok
-  ne dobije prijavu (korak 8).
+  ne dobije prijavu (korak 9).
 
 JEDAN PROCES ZA SVE UPISE
 -------------------------
@@ -62,10 +66,12 @@ drugog. Zato je najbolje pokrenuti dashboard sa --nadzor 60: tada isti
 proces radi oboje, a brava (lock) pazi da se upisi nikad ne preklope.
 """
 
+import os
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -74,11 +80,15 @@ from pydantic import BaseModel, Field
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+import json
+import time
 from urllib.parse import unquote
+from zoneinfo import ZoneInfo
 
-from app import dodavanje
+from app import dodavanje, tajne
+from app.alarmi import mejl
 from app.alarmi.evidencija import Evidencija
-from app.alarmi.konfiguracija import PODRAZUMEVANA_PUTANJA, Konfiguracija
+from app.alarmi.konfiguracija import KANAL_STRANICE, PODRAZUMEVANA_PUTANJA, Konfiguracija, MejlPodesavanja
 from app.baza import Baza
 from app.dashboard import podaci
 from app.nadzor import jedan_krug
@@ -104,8 +114,18 @@ class Potvrda(BaseModel):
     napomena: str | None = Field(default=None, max_length=500)
 
 
+class ProbniProblem(BaseModel):
+    vrsta: Literal["neobicna", "greska"]
+
+
 class Resenje(BaseModel):
+    ko: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"\S")
     napomena: str | None = Field(default=None, max_length=500)
+
+
+class MejlSaStranice(MejlPodesavanja):
+    # Nova lozinka: samo kad je čovek upiše. Prazno = ostaje sačuvana.
+    lozinka: str | None = Field(default=None, max_length=512)
 
 
 class PutanjaIzvora(BaseModel):
@@ -147,7 +167,8 @@ class Kes:
 def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
                        nadzor_sekundi: int | None = None,
                        hostovi: list[str] | None = None,
-                       putanja_podesavanja: Path = PODRAZUMEVANA_PUTANJA) -> FastAPI:
+                       putanja_podesavanja: Path = PODRAZUMEVANA_PUTANJA,
+                       pre_kruga=None, izazovi_problem=None) -> FastAPI:
     """
     Pravi veb aplikaciju dashboarda.
 
@@ -156,6 +177,11 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
     nadzor_sekundi:   ako je zadato, krug nadzora se pokreće na toliko sekundi
     hostovi:          dozvoljena imena servera (podrazumevano samo ovaj računar)
     putanja_podesavanja: gde se čuvaju podešavanja kad se izvor doda sa stranice
+    pre_kruga:        funkcija koja se pozove pre svakog kruga nadzora (probni
+                      podaci "uživo" se tu dopisuju, pa nadzor nikad ne čita
+                      fajl dok se u njega piše)
+    izazovi_problem:  samo uz probne podatke: funkcija koja odmah dopiše jedan
+                      loš rezultat (dugme "Napravi problem sada")
     """
     baza = Baza(k.baza)
     brava = threading.Lock()  # samo jedan upis u isto vreme
@@ -168,14 +194,70 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
         """"Sada" je poslednji rezultat: za probu, ili kad su svi izvori stari podaci."""
         return sada_po_podacima or bool(k.izvori) and all(i.istorijski for i in k.izvori)
 
+    stanje_mejla_putanja = Path(putanja_podesavanja).parent / "mejl_stanje.json"
+
+    def stanje_mejla() -> dict:
+        """Kad je poslat poslednji dnevni pregled i poslednja greška slanja (za stranicu)."""
+        try:
+            return json.loads(stanje_mejla_putanja.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def zapamti_stanje_mejla(**izmene) -> None:
+        s = {**stanje_mejla(), **izmene}
+        stanje_mejla_putanja.parent.mkdir(parents=True, exist_ok=True)
+        stanje_mejla_putanja.write_text(json.dumps(s, ensure_ascii=False), encoding="utf-8")
+
+    def posalji_pregled(sada: datetime, proba: bool = False) -> None:
+        """Dnevni pregled (ili probni mejl) sa trenutnim stanjem iz baze."""
+        naslov, tekst, html_ = mejl.mejl_pregled(
+            baza.ucitaj_alarme(), ZoneInfo(k.zona), sada, k.mejl.adresa_aplikacije,
+            len(baza.modeli()), proba=proba)
+        try:
+            mejl.posalji_po_podesavanjima(k.mejl, naslov, tekst, html_)
+        except ValueError as e:  # lozinka ne može da se dešifruje
+            raise mejl.GreskaSlanja(str(e)) from None
+
+    def dnevni_ako_treba() -> None:
+        """Posle svakog kruga: ako je vreme za dnevni pregled, a danas nije poslat."""
+        sada = datetime.now(timezone.utc)
+        s = stanje_mejla()
+        if not mejl.vreme_za_dnevni(k.mejl, sada, ZoneInfo(k.zona), s.get("dnevni")):
+            return
+        # Posle neuspeha ne pokušava se svakog minuta, nego na 30 minuta.
+        if s.get("dnevni_neuspeh") and time.time() - s["dnevni_neuspeh"] < 1800:
+            return
+        try:
+            posalji_pregled(sada)
+            zapamti_stanje_mejla(dnevni=sada.astimezone(ZoneInfo(k.zona)).isoformat(timespec="seconds"),
+                                 dnevni_neuspeh=None, greska=None)
+            print(f"[{datetime.now():%H:%M:%S}] dnevni pregled poslat mejlom")
+        except mejl.GreskaSlanja as e:
+            zapamti_stanje_mejla(dnevni_neuspeh=time.time(), greska=f"Dnevni pregled nije poslat: {e}")
+            print(f"    GREŠKA mejla: {e}")
+
     def krug_nadzora() -> dict:
         """Jedan krug nadzora (korak 5), pod bravom."""
         with brava:
+            if pre_kruga:
+                try:
+                    pre_kruga()
+                except Exception as e:  # probni podaci ne smeju da zaustave nadzor
+                    print(f"GREŠKA probnih podataka: {e}")
             iz = jedan_krug(k, None if sada_po_podacima else datetime.now(timezone.utc))
+        # Greška mejla sa stranice se pamti, da se vidi u podešavanjima.
+        greske_mejla = [g for g in iz.greske if KANAL_STRANICE in g]
+        if greske_mejla:
+            zapamti_stanje_mejla(greska=greske_mejla[-1].split(": ", 1)[-1])
+        elif iz.poslato.get(KANAL_STRANICE):
+            # Slanje radi: ako je dnevni pregled ranije pao, ne čeka se 30 min.
+            zapamti_stanje_mejla(greska=None, dnevni_neuspeh=None,
+                                 poslednji_odmah=podaci.ms(datetime.now(timezone.utc)))
         izvestaj = {
             "novih_rezultata": iz.novih_rezultata, "provereno": iz.provereno,
             "nalaza": iz.nalaza, "novih_alarma": iz.novih_alarma,
             "otvorenih_alarma": iz.otvorenih_alarma, "greske": iz.greske,
+            "poslato_mejlom": bool(iz.poslato.get(KANAL_STRANICE)),
         }
         nadzor["poslednji_krug"] = podaci.ms(datetime.now(timezone.utc))
         nadzor["izvestaj"] = izvestaj
@@ -192,6 +274,10 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
                     print(f"    GREŠKA: {greska}")
             except Exception as e:  # nadzor ne sme da obori dashboard
                 print(f"GREŠKA u nadzoru: {e}")
+            try:
+                dnevni_ako_treba()
+            except Exception as e:  # ni mejl ne sme da obori dashboard
+                print(f"GREŠKA dnevnog pregleda: {e}")
             kraj_rada.wait(nadzor_sekundi)
 
     @asynccontextmanager
@@ -228,7 +314,7 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
     @app.get("/api/stanje")
     def stanje():
         return {"verzija": trenutna_verzija(), "sada_po_podacima": po_podacima(),
-                "nadzor": nadzor, "izvora": len(k.izvori)}
+                "nadzor": nadzor, "izvora": len(k.izvori), "demo": bool(izazovi_problem)}
 
     @app.get("/api/pregled")
     def pregled(dana: float = Query(30, gt=0, le=3700)):
@@ -271,7 +357,8 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
         with brava:
             evidencija = Evidencija(baza=baza)
             try:
-                a = evidencija.resi(broj, telo.napomena)
+                a = evidencija.resi(broj, (telo.napomena or "").strip() or None,
+                                     telo.ko.strip() if telo.ko else None)
             except KeyError as e:
                 raise HTTPException(404, e.args[0])
             evidencija.sacuvaj()
@@ -281,7 +368,66 @@ def napravi_aplikaciju(k: Konfiguracija, sada_po_podacima: bool = False,
     def nadzor_odmah():
         return krug_nadzora()
 
+    @app.post("/api/demo/problem")
+    def napravi_problem(z: ProbniProblem):
+        """Probni podaci: model "odjednom" pogreši, provera odmah ide (i mejl sa njom)."""
+        if not izazovi_problem:
+            raise HTTPException(404, "Probni podaci nisu uključeni (python -m app --demo).")
+        with brava:
+            opis = izazovi_problem(z.vrsta)
+        return {"opis": opis, "izvestaj": krug_nadzora()}
+
     # --- izvori: dodavanje podataka sa stranice ---
+
+    # --- mejl ---
+
+    def opis_mejla() -> dict:
+        s = stanje_mejla()
+        return {**k.mejl.model_dump(),
+                # Lozinka se NIKAD ne šalje nazad: samo da li postoji.
+                "lozinka_sacuvana": tajne.postoji("mejl"),
+                "lozinka_iz_okruzenja": bool(os.environ.get(mejl.PROMENLJIVA_LOZINKE)),
+                "dnevni_poslat": s.get("dnevni"), "greska": s.get("greska")}
+
+    @app.get("/api/mejl")
+    def mejl_podesavanja():
+        return opis_mejla()
+
+    @app.post("/api/mejl")
+    def sacuvaj_mejl(z: MejlSaStranice):
+        with brava:
+            novo = MejlPodesavanja(**z.model_dump(exclude={"lozinka"}))
+            if novo.ukljuceno and not (novo.server and novo.za):
+                raise HTTPException(400, "Za uključivanje mejla upišite server i bar jednog primaoca.")
+            if z.lozinka:
+                tajne.sacuvaj("mejl", z.lozinka)
+            k.mejl = novo
+            k.sacuvaj(putanja_podesavanja)
+            # Nova podešavanja (npr. ispravljena lozinka): dnevni pregled se
+            # pokušava odmah, ne čeka se 30 minuta posle prethodnog neuspeha.
+            zapamti_stanje_mejla(dnevni_neuspeh=None)
+        return opis_mejla()
+
+    @app.delete("/api/mejl/lozinka")
+    def zaboravi_lozinku():
+        tajne.obrisi("mejl")
+        return opis_mejla()
+
+    poslednja_proba = [0.0]
+
+    @app.post("/api/mejl/proba")
+    def probni_mejl():
+        # Najviše jedan probni mejl na 10 s: dugme ne sme da postane "top za mejlove".
+        if time.time() - poslednja_proba[0] < 10:
+            raise HTTPException(429, "Sačekajte malo pre sledećeg probnog mejla.")
+        poslednja_proba[0] = time.time()
+        try:
+            posalji_pregled(datetime.now(timezone.utc), proba=True)
+        except mejl.GreskaSlanja as e:
+            zapamti_stanje_mejla(greska=str(e))
+            raise HTTPException(400, str(e))
+        zapamti_stanje_mejla(greska=None, dnevni_neuspeh=None)
+        return {"poruka": f"Probni mejl je poslat na: {', '.join(k.mejl.za)}."}
 
     @app.get("/api/izvori")
     def izvori():

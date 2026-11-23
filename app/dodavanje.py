@@ -22,7 +22,9 @@ oktobar, koja od pet brojčanih kolona je odgovor modela). Zato aplikacija
 pogodi, pokaže šta je pogodila i čovek jednom potvrdi. Posle toga radi sama.
 """
 
+import fnmatch
 import glob
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -232,3 +234,21 @@ def opis_izvora(izvor: Izvor) -> dict:
         "istorijski": izvor.istorijski,
         "ubacen": str(izvor.putanja).startswith(str(FOLDER_ULAZA)),
     }
+
+
+def pripada_izvoru(fajl: str, izvor: Izvor) -> bool:
+    """Da li je fajl (iz baze) jedan od fajlova ovog izvora: isti fajl, fajl u folderu ili po zvezdici."""
+    f = os.path.abspath(fajl)
+    src = os.path.abspath(izvor.putanja)
+    if "*" in src:
+        return fnmatch.fnmatch(f, src)
+    return f == src or f.startswith(src.rstrip(os.sep) + os.sep)
+
+
+def napusteni_modeli(k: Konfiguracija, baza) -> list[str]:
+    """
+    Modeli koji su u bazi, a nijedan njihov fajl više ne prati nijedan izvor
+    (ostaci starih proba). Oni bi zauvek javljali "Podaci ne stižu".
+    """
+    return sorted(model for model, fajlovi in baza.fajlovi_po_modelu().items()
+                  if not any(pripada_izvoru(f, i) for f in fajlovi for i in k.izvori))

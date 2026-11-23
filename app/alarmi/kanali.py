@@ -1,7 +1,5 @@
 import json
-import smtplib
 import urllib.request
-from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -56,6 +54,8 @@ class DnevnikKanal:
 
 
 class MejlKanal:
+    """Mejl iz ručno napisane konfiguracije (koraci 4-6). Šalje se isto kao sa stranice (korak 8)."""
+
     def __init__(self, server: str, port: int, korisnik: str | None, lozinka: str | None,
                  posiljalac: str, primaoci: list[str], zona: ZoneInfo):
         self.server, self.port = server, port
@@ -63,18 +63,10 @@ class MejlKanal:
         self.posiljalac, self.primaoci, self.zona = posiljalac, primaoci, zona
 
     def posalji(self, alarmi: list[Alarm]) -> None:
-        naslov, telo = tekst_poruke(alarmi, self.zona)
-        poruka = EmailMessage()
-        poruka["Subject"] = naslov
-        poruka["From"] = self.posiljalac
-        poruka["To"] = ", ".join(self.primaoci)
-        poruka.set_content(telo)
-
-        with smtplib.SMTP(self.server, self.port, timeout=30) as smtp:
-            smtp.starttls()  # šifrovana veza do mejl servera
-            if self.korisnik:
-                smtp.login(self.korisnik, self.lozinka)
-            smtp.send_message(poruka)
+        from app.alarmi.mejl import mejl_odmah, posalji  # šifrovana veza, provera sertifikata
+        naslov, tekst, html_ = mejl_odmah(alarmi, self.zona, None)
+        posalji(self.server, self.port, self.korisnik, self.lozinka, self.posiljalac,
+                self.primaoci, naslov, tekst, html_)
 
 
 class WebhookKanal:

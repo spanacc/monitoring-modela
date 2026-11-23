@@ -63,8 +63,14 @@ def test_mejl(monkeypatch):
         def __exit__(self, *args):
             pass
 
-        def starttls(self):
-            poslato["tls"] = True
+        def ehlo(self):
+            pass
+
+        def has_extn(self, ime):
+            return ime == "starttls"
+
+        def starttls(self, context=None):
+            poslato["tls"] = context is not None  # šifrovano, uz proveru sertifikata
 
         def login(self, korisnik, lozinka):
             poslato["prijava"] = (korisnik, lozinka)
@@ -72,7 +78,8 @@ def test_mejl(monkeypatch):
         def send_message(self, poruka):
             poslato["poruka"] = poruka
 
-    monkeypatch.setattr(kanali.smtplib, "SMTP", LazniSMTP)
+    from app.alarmi import mejl as mejl_modul
+    monkeypatch.setattr(mejl_modul.smtplib, "SMTP", LazniSMTP)
     mejl = kanali.MejlKanal("smtp.firma.rs", 587, "mon", "tajna", "mon@firma.rs",
                             ["a@firma.rs", "b@firma.rs"], BEOGRAD)
     mejl.posalji([alarm()])
@@ -81,7 +88,7 @@ def test_mejl(monkeypatch):
     assert poslato["tls"]  # veza je šifrovana
     assert poslato["prijava"] == ("mon", "tajna")
     assert poslato["poruka"]["To"] == "a@firma.rs, b@firma.rs"
-    assert poslato["poruka"]["Subject"] == "[KRITIČNO] izostanak: senzori / M2"
+    assert poslato["poruka"]["Subject"] == "[Monitoring] Hitno: Podaci ne stižu (senzori)"
 
 
 def test_poruka_preko_webhook_a():

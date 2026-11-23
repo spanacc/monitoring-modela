@@ -155,7 +155,7 @@ def posalji_obavestenja(evidencija: Evidencija, k: Konfiguracija, izvestaj: Izve
     cekaju = [a for a in evidencija.alarmi if a.za_slanje]
     po_kanalu: dict[str, list[Alarm]] = defaultdict(list)
     for a in cekaju:
-        for ime in k.slanje.get(a.ozbiljnost, []):
+        for ime in k.kanali_za(a.ozbiljnost):
             po_kanalu[ime].append(a)
 
     neuspeli: set[str] = set()
@@ -168,7 +168,7 @@ def posalji_obavestenja(evidencija: Evidencija, k: Konfiguracija, izvestaj: Izve
             izvestaj.greske.append(f"Kanal '{ime}' nije uspeo: {e}")
 
     for a in cekaju:
-        if not neuspeli & set(k.slanje.get(a.ozbiljnost, [])):
+        if not neuspeli & set(k.kanali_za(a.ozbiljnost)):
             a.za_slanje = False
 
 

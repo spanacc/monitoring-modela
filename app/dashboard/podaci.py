@@ -44,7 +44,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
 
-from app.alarmi.evidencija import REDOSLED, Alarm, StatusAlarma
+from app.alarmi.evidencija import NAZIVI, REDOSLED, Alarm, StatusAlarma
 from app.alarmi.konfiguracija import Konfiguracija
 from app.baza import POLJA_REZULTATA, Baza, iz_baze, u_utc
 from app.baza import alarmi as tabela_alarma
@@ -55,21 +55,6 @@ from app.provere.kvalitet import nemoguce_tacke
 from app.provere.osnova import Granice, po_serijama, prozori, trajanje
 from app.provere.tacnost import greske, kategorije_tacke
 from app.schema import Rezultat, Status
-
-# Imena problema za ljude (u bazi su kratka imena). Običnim rečima, bez
-# stručnih izraza: ovo čitaju i ljudi koji ne znaju šta je "drift".
-NAZIVI = {
-    "izostanak": "Podaci ne stižu",
-    "duplikat": "Isti podaci stigli više puta",
-    "greska_modela": "Model javlja grešku",
-    "prazne_vrednosti": "Rezultati bez vrednosti",
-    "nemoguca_vrednost": "Neobična vrednost",
-    "pristrasnost": "Model stalno greši u istom smeru",
-    "drift": "Ponašanje se promenilo",
-    "promasen_skok": "Veliki promašaj",
-    "pad_tacnosti": "Tačnost je opala",
-    "promena_kategorija": "Odgovori su se promenili",
-}
 
 NAJVISE_TACAKA = 1500  # najviše tačaka u jednom grafikonu
 

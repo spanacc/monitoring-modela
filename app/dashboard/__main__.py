@@ -40,7 +40,7 @@ def main() -> None:
     hostovi = ["127.0.0.1", "localhost"]
     if args.adresa not in SAMO_OVAJ_RACUNAR:
         print("PAŽNJA: dashboard je dostupan i drugim računarima u mreži, a još nema "
-              "prijavu (dolazi u koraku 8). Koristite ovo samo u zaštićenoj mreži.")
+              "prijavu (dolazi u koraku 9). Koristite ovo samo u zaštićenoj mreži.")
         hostovi = ["*"] if args.adresa in ("0.0.0.0", "::") else hostovi + [args.adresa]
 
     app = napravi_aplikaciju(k, sada_po_podacima=args.sada == "podaci",

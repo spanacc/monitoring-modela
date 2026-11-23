@@ -39,15 +39,84 @@
       <div class="razmak"></div>
     </section>
 
-    <section class="ploca">
+    <section class="ploca" id="demo" aria-labelledby="demo-naslov" hidden>
       <div class="ploca__glava">
         <div>
-          <h2>Obaveštenja mejlom</h2>
-          <p class="ploca__opis">Još se ne podešavaju ovde. Za sad se upisuju u fajl <code>data/podesavanja.json</code>
-            (primer je u <code>konfiguracija.primer.json</code>), a lozinka ide u promenljivu okruženja, nikad u fajl.</p>
+          <h2 id="demo-naslov">Probni problem</h2>
+          <p class="ploca__opis">Samo uz probne podatke. Model „odjednom“ pogreši, provera to odmah nađe i, ako su obaveštenja uključena, stiže mejl.</p>
         </div>
       </div>
-      <div class="razmak"></div>
+      <div class="demo__red">
+        <select id="demo-vrsta" aria-label="Vrsta problema">
+          <option value="neobicna">Peć 1 vrati nemoguću vrednost</option>
+          <option value="greska">Model za potrošnju javi grešku</option>
+        </select>
+        <button type="button" class="dugme" id="demo-dugme">Napravi problem sada</button>
+      </div>
+      <p class="dijalog__napomena" id="demo-rezultat"></p>
+    </section>
+
+    <section class="ploca" aria-labelledby="mejl-naslov">
+      <div class="ploca__glava">
+        <div>
+          <h2 id="mejl-naslov">Obaveštenja mejlom</h2>
+          <p class="ploca__opis" id="mejl-stanje">Učitavam…</p>
+        </div>
+        <label class="prekidac desno">
+          <input type="checkbox" id="mejl-ukljuceno">
+          <span>Uključeno</span>
+        </label>
+      </div>
+
+      <form class="mejl" id="mejl-forma" novalidate>
+        <p class="mejl__greska" id="mejl-greska" role="alert" hidden></p>
+
+        <fieldset class="mejl__deo">
+          <legend>Kada se šalje</legend>
+          <label class="kvadratic"><input type="checkbox" id="mejl-odmah"> Odmah, za svaki nov problem <span class="slabo">(napomene ne)</span></label>
+          <label class="kvadratic"><input type="checkbox" id="mejl-dnevni"> Dnevni pregled u
+            <input type="time" id="mejl-sat" step="60" class="mejl__sat"></label>
+        </fieldset>
+
+        <label class="polje">
+          <span>Ko dobija (jedna adresa po redu)</span>
+          <textarea id="mejl-za" rows="3" maxlength="2000" spellcheck="false" placeholder="ime.prezime@firma.rs"></textarea>
+        </label>
+
+        <fieldset class="mejl__deo">
+          <legend>Nalog sa koga se šalje</legend>
+          <p class="slabo mejl__brzo">Brzo popunjavanje: <button type="button" class="veza" id="mejl-gmail">Gmail</button>
+            · <button type="button" class="veza" id="mejl-outlook">Microsoft 365 / Outlook</button></p>
+          <div class="mejl__red">
+            <label class="polje"><span>Mejl server</span><input type="text" id="mejl-server" maxlength="253" spellcheck="false" placeholder="smtp.gmail.com"></label>
+            <label class="polje polje--usko"><span>Port</span><input type="number" id="mejl-port" min="1" max="65535"></label>
+          </div>
+          <label class="polje"><span>Nalog (mejl adresa)</span><input type="email" id="mejl-korisnik" maxlength="254" autocomplete="off" spellcheck="false" placeholder="monitoring@gmail.com"></label>
+          <label class="polje"><span>Lozinka</span>
+            <input type="password" id="mejl-lozinka" maxlength="512" autocomplete="new-password" spellcheck="false">
+          </label>
+          <p class="slabo" id="mejl-lozinka-opis"></p>
+          <details class="mejl__pomoc">
+            <summary>Gmail: kako se dobija „lozinka za aplikaciju“</summary>
+            <ol>
+              <li>Na Google nalogu mora biti uključena dvostepena prijava (Bezbednost → Dvostepena verifikacija).</li>
+              <li>Otvorite myaccount.google.com/apppasswords, upišite ime (npr. „Monitoring“) i kliknite Napravi.</li>
+              <li>Prepišite 16 slova koja Google pokaže u polje Lozinka iznad. Obična lozinka naloga ne radi.</li>
+            </ol>
+            <p>Gmail je za probu. Podatke firme ne bi trebalo slati preko privatnog naloga: za pravi rad pitajte IT za firmin mejl nalog.</p>
+          </details>
+        </fieldset>
+
+        <label class="polje">
+          <span>Adresa aplikacije <span class="slabo">(nije obavezno: dugme „Otvori monitoring“ u mejlu)</span></span>
+          <input type="url" id="mejl-adresa" maxlength="300" spellcheck="false" placeholder="http://monitoring.firma.rs">
+        </label>
+
+        <div class="mejl__dugmad">
+          <button type="button" class="dugme dugme--tiho" id="mejl-proba">Pošalji probni mejl</button>
+          <button type="submit" class="dugme" id="mejl-sacuvaj">Sačuvaj</button>
+        </div>
+      </form>
     </section>
   </main>
 

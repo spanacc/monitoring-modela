@@ -101,7 +101,10 @@ def udeli(prozor: list[tuple[datetime, str]]) -> dict[str, float]:
 
 def najveci_pomak(udeo: dict[str, float], normalno: dict[str, float]) -> tuple[str, float]:
     """Kategorija čiji se udeo najviše pomerio od normalnog, i za koliko."""
-    kat = max(set(udeo) | set(normalno), key=lambda k: abs(udeo.get(k, 0) - normalno.get(k, 0)))
+    # Kod jednakog pomeraja bira se kategorija koja je PORASLA (npr. "kvar" sa
+    # 10% na 90%), jer to čoveku više govori; i uvek ista, bez slučajnosti.
+    kat = max(sorted(set(udeo) | set(normalno)),
+              key=lambda k: (round(abs(udeo.get(k, 0) - normalno.get(k, 0)), 9), udeo.get(k, 0) > normalno.get(k, 0)))
     return kat, udeo.get(kat, 0) - normalno.get(kat, 0)
 
 

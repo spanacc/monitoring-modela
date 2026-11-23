@@ -147,7 +147,7 @@ Sva tri fajla iz testova ubačena su kroz stranicu, samo sa potvrdom predloga:
   `data/podesavanja.json`.
 - Excel fajl (.xlsx) direktno; prvo se sačuva kao CSV.
 - Čitanje iz baze ili preko API-ja; za sad samo fajlovi.
-- Prijava korisnika i rad u mreži: korak 8. Dok toga nema, dashboard vidi
+- Prijava korisnika i rad u mreži: korak 9. Dok toga nema, dashboard vidi
   samo ovaj računar, jer sa stranice može da se zada putanja do bilo kog
   CSV fajla na njemu.
 
@@ -161,4 +161,4 @@ Sva tri fajla iz testova ubačena su kroz stranicu, samo sa potvrdom predloga:
 
 ## Sledeći korak
 
-Korak 8: prijava, uloge, HTTPS i postavljanje na server.
+Korak 8: obaveštenja mejlom. Posle toga korak 9: prijava, uloge, HTTPS i postavljanje na server.

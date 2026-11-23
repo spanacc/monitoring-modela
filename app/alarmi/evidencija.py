@@ -28,7 +28,7 @@ aplikacije ne zna razliku, jer koristi samo ovu klasu.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -38,6 +38,21 @@ from app.provere import Nalaz, Ozbiljnost
 
 # Redosled ozbiljnosti, da bi moglo da se kaže "kritično je gore od upozorenja".
 REDOSLED = {Ozbiljnost.INFO: 0, Ozbiljnost.UPOZORENJE: 1, Ozbiljnost.KRITICNO: 2}
+
+# Imena problema za ljude (u bazi su kratka imena). Običnim rečima, bez
+# stručnih izraza: ovo čitaju i ljudi koji ne znaju šta je "drift".
+NAZIVI = {
+    "izostanak": "Podaci ne stižu",
+    "duplikat": "Isti podaci stigli više puta",
+    "greska_modela": "Model javlja grešku",
+    "prazne_vrednosti": "Rezultati bez vrednosti",
+    "nemoguca_vrednost": "Neobična vrednost",
+    "pristrasnost": "Model stalno greši u istom smeru",
+    "drift": "Ponašanje se promenilo",
+    "promasen_skok": "Veliki promašaj",
+    "pad_tacnosti": "Tačnost je opala",
+    "promena_kategorija": "Odgovori su se promenili",
+}
 
 
 class StatusAlarma(str, Enum):
@@ -169,10 +184,13 @@ class Evidencija:
             a.napomena = napomena
         return a
 
-    def resi(self, id_: int, napomena: str | None = None) -> Alarm:
+    def resi(self, id_: int, napomena: str | None = None, ko: str | None = None) -> Alarm:
         """Problem je otklonjen. Ako se ponovo javi, alarm se ponovo otvara."""
         a = self.nadji_po_id(id_)
         a.status = StatusAlarma.RESEN
+        a.poslednji_put = datetime.now(timezone.utc)
+        if ko:
+            a.potvrdio = ko  # ko je rešio (isto polje kao "video", da baza ostane ista)
         if napomena:
             a.napomena = napomena
         return a

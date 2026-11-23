@@ -154,6 +154,15 @@ class Baza:
             veza.execute(delete(rezultati).where(rezultati.c.model == model))
             veza.execute(delete(alarmi).where(alarmi.c.model == model))
 
+    def fajlovi_po_modelu(self) -> dict[str, set[str]]:
+        """Iz kojih fajlova su stigli rezultati svakog modela."""
+        with self.motor.connect() as veza:
+            redovi = veza.execute(select(rezultati.c.model, rezultati.c.izvor_fajl).distinct())
+            po_modelu: dict[str, set[str]] = {}
+            for model, fajl in redovi:
+                po_modelu.setdefault(model, set()).add(fajl)
+            return po_modelu
+
     def modeli(self) -> list[str]:
         with self.motor.connect() as veza:
             return list(veza.execute(select(rezultati.c.model).distinct()).scalars())
