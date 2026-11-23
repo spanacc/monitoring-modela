@@ -310,6 +310,7 @@ code { font: 13px var(--mono); }
 .znak--videno { background: var(--plava); }
 .znak--proslo { background: var(--siva-znak); }
 .nema-problema { padding: 10px 20px 22px; text-align: center; color: var(--tekst-2); font-size: 14px; }
+.nema-problema__naslov { color: var(--tekst); font-weight: 600; font-size: 16px; }
 .nema-problema__znak {
   display: grid; place-items: center;
   width: 40px; height: 40px; margin: 4px auto 10px;
@@ -545,3 +546,23 @@ code { font: 13px var(--mono); }
 
 .demo__red { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .demo__red select { flex: 1 1 240px; }
+
+/* ---------- svi modeli, po jedan red (kolona desno) ---------- */
+
+.modeli-spisak { list-style: none; margin: 0 12px 10px; padding: 0; }
+.model-red {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+  column-gap: 10px; row-gap: 1px;
+  width: 100%; padding: 8px 10px;
+  border: 0; border-radius: 8px; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.model-red:hover { background: var(--pozadina); }
+.model-red:focus-visible { outline: 2px solid var(--plava); outline-offset: -2px; }
+.model-red--izabran { background: var(--pozadina); }
+.model-red .tacka { grid-row: span 2; }
+.model-red__ime { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.model-red__stanje { font-size: 13px; font-weight: 600; color: var(--zelena); }
+.model-red__stanje--upozorenje { color: var(--zuta); }
+.model-red__stanje--kriticno { color: var(--crvena); }
+.model-red__kada { grid-column: 2 / 4; font-size: 12px; color: var(--tekst-3); }

@@ -44,7 +44,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select
 
-from app.alarmi.evidencija import NAZIVI, REDOSLED, Alarm, StatusAlarma
+from app.alarmi.evidencija import NAZIVI, REDOSLED, Alarm, Ozbiljnost, StatusAlarma
 from app.alarmi.konfiguracija import Konfiguracija
 from app.baza import POLJA_REZULTATA, Baza, iz_baze, u_utc
 from app.baza import alarmi as tabela_alarma
@@ -313,6 +313,15 @@ def pregled(baza: Baza, k: Konfiguracija, sada: datetime, dana: float) -> dict:
     ukupno["modela"] = len(modeli)
     najhitniji = min(aktivni, key=hitnost, default=None)
 
+    # "Bez problema od": kraj poslednjeg pravog problema (napomene se ne
+    # računaju), ili prvi rezultat ako problema nikad nije bilo. Samo dok
+    # nijedan problem nije otvoren.
+    mirno_od = None
+    if not any(a.ozbiljnost != Ozbiljnost.INFO for a in aktivni) and poslednji:
+        kraj_problema = [a.do for a in svi_alarmi if a.ozbiljnost != Ozbiljnost.INFO]
+        mirno_od = ms(max(kraj_problema) if kraj_problema
+                      else min(iz_baze(red["prvo"]) for red in poslednji.values()))
+
     return {
         "sada": ms(sada),
         "od": ms(od),
@@ -321,6 +330,7 @@ def pregled(baza: Baza, k: Konfiguracija, sada: datetime, dana: float) -> dict:
         "ukupno": ukupno,
         "najhitniji": za_prikaz(najhitniji) if najhitniji else None,
         "najhitniji_izvora": len(grupe[kljuc_grupe(najhitniji)]) if najhitniji else 0,
+        "mirno_od": mirno_od,
         "nazivi": NAZIVI,
         "modeli": [{"model": m, "istorijski": m in istorijski,
                     "od": ms(period_modela[m][0]), "sada": ms(period_modela[m][1]),

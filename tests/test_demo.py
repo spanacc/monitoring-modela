@@ -104,3 +104,20 @@ def test_bez_demoa_nema_dugmeta(tmp_path):
     assert klijent.get("/api/stanje").json()["demo"] is False
     assert klijent.post("/api/demo/problem", headers={"X-Dashboard": "1"},
                         json={"vrsta": "greska"}).status_code == 404
+
+
+def test_bez_problema_od(tmp_path, monkeypatch):
+    """Pregled kaže od kad nema problema, a dok je neki otvoren, ne kaže."""
+    monkeypatch.chdir(tmp_path)
+    k = Konfiguracija(baza=f"sqlite:///{tmp_path / 'b.db'}", izvori=[])
+    sada = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
+    uzivo.ukljuci(k, tmp_path / "p.json", sada=sada)
+    klijent = TestClient(napravi_aplikaciju(k, putanja_podesavanja=tmp_path / "p.json",
+                                            hostovi=["testserver"]))
+    jedan_krug(k, sada)
+    assert klijent.get("/api/pregled?dana=30").json()["mirno_od"] is None
+    # Svi problemi rešeni: "bez problema" od kraja poslednjeg.
+    for a in klijent.get("/api/alarmi").json():
+        klijent.post(f"/api/alarmi/{a['id']}/resi", headers={"X-Dashboard": "1"}, json={"ko": "Test"})
+    p = klijent.get("/api/pregled?dana=30").json()
+    assert p["mirno_od"] is not None and p["mirno_od"] <= p["sada"]

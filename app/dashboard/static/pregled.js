@@ -14,8 +14,8 @@
  */
 
 import {
-  $, DAN, SAT, api, broj, datum, h, mnozina, naslovOblacica, obavesti, postaviZonu, prikaziOblacic,
-  raspon, s, saJedinicom, sakrijOblacic, satMinut, seti, starost, svgTekst, vreme, zapamti,
+  $, DAN, MINUT, SAT, api, broj, datum, h, mnozina, naslovOblacica, obavesti, postaviZonu, prikaziOblacic,
+  raspon, s, saJedinicom, sakrijOblacic, satMinut, seti, starost, svgTekst, trajanje, vreme, zapamti,
 } from "./alati.js";
 
 const OSVEZAVANJE_MS = 15000;
@@ -200,6 +200,7 @@ async function izaberi(model, izvor, alarm = null) {
     return;
   }
   crtajTabove();
+  crtajProbleme(); // istakne izabrani model u spisku desno
   await ucitajSeriju();
 }
 
@@ -430,10 +431,11 @@ function crtajProbleme() {
   $("problemi-broj").textContent = `${n} ${mnozina(n, ["otvoren", "otvorena", "otvorenih"])}`;
 
   const lista = otvoreni.map(karticaProblema);
-  if (!n) {
-    lista.push(h("div", { class: "nema-problema" },
-      h("span", { class: "nema-problema__znak", "aria-hidden": "true" }, "✓"),
-      h("p", null, "Nema problema."), h("p", { class: "slabo" }, "Kad nešto iskrsne, pojaviće se ovde.")));
+  if (!n) lista.push(sveURedu());
+  // Svi modeli, po jedan red: da se vidi da je svaki živ i proveren.
+  if (st.pregled.modeli.length) {
+    if (n) lista.push(h("p", { class: "problemi__podnaslov" }, "Svi modeli"));
+    lista.push(h("ul", { class: "modeli-spisak" }, ...st.pregled.modeli.map(redModela)));
   }
   if (napomene.length) {
     // Napomene (sitnice, npr. isti podatak stigao dvaput) su samo za znanje.
@@ -445,6 +447,47 @@ function crtajProbleme() {
     lista.push(...prosli.map(karticaProblema));
   }
   $("lista-problema").replaceChildren(...lista);
+}
+
+/** Kad nema otvorenih problema: jasno "sve u redu", od kad, i kad je provereno. */
+function sveURedu() {
+  const p = st.pregled;
+  const zivo = !p.modeli.every((m) => m.istorijski);
+  const redovi = [];
+  if (zivo && p.mirno_od) {
+    const mirno = p.sada - p.mirno_od;
+    redovi.push(mirno >= 2 * MINUT ? `Bez problema ${trajanje(mirno)}.` : "Problemi su upravo prošli.");
+  }
+  if (st.nadzor?.poslednji_krug) {
+    redovi.push(`Provereno ${starost((Date.now() - st.nadzor.poslednji_krug) / 1000)}.`);
+  }
+  return h("div", { class: "nema-problema" },
+    h("span", { class: "nema-problema__znak", "aria-hidden": "true" }, "✓"),
+    h("p", { class: "nema-problema__naslov" }, "Sve u redu"),
+    redovi.length ? h("p", { class: "slabo" }, redovi.join(" ")) : null);
+}
+
+const RECI_STANJA = { ok: "u redu", info: "u redu", upozorenje: "problem", kriticno: "hitno" };
+
+/** Jedan red u spisku modela: tačka u boji stanja, ime, stanje, poslednji rezultat. */
+function redModela(m) {
+  const najgori = ["kriticno", "upozorenje", "info"].find((o) => m.izvori.some((i) => i.stanje === o)) ?? "ok";
+  const boja = najgori === "info" ? "ok" : najgori;
+  const sveze = Math.min(...m.izvori.map((i) => i.starost_s));
+  const kada = m.istorijski ? "stari podaci" : `poslednji rezultat ${starost(sveze)}`;
+  let stanje = RECI_STANJA[najgori];
+  if (boja !== "ok" && m.izvori.filter((i) => i.stanje === najgori).every((i) => i.potvrdjeno)) stanje += ", neko je video";
+  const izabran = st.izbor?.model === m.model;
+  return h("li", null, h("button", {
+    type: "button", class: `model-red${izabran ? " model-red--izabran" : ""}`,
+    "aria-current": izabran ? "true" : null,
+    title: "Prikaži na grafikonu",
+    onclick: () => izaberi(m.model),
+  },
+  h("i", { class: `tacka tacka--${boja}`, "aria-hidden": "true" }),
+  h("span", { class: "model-red__ime" }, m.model),
+  h("span", { class: `model-red__stanje model-red__stanje--${boja}` }, stanje),
+  h("span", { class: "model-red__kada" }, kada)));
 }
 
 function karticaProblema(grupa) {

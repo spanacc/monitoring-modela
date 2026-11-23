@@ -79,6 +79,22 @@ Veljko, 23.11. 13:03: ponovo pokrenut prenos podataka.“
 Ako problem i dalje traje (npr. model i dalje greši), sledeća provera ga
 ponovo otvara i šalje mejl. To piše i u prozoru, da ne bude iznenađenje.
 
+## „Sve u redu“ i spisak modela
+
+Ekran samo sa problemima ima manu: prazan ekran može da znači „sve je
+dobro“ ili „monitoring je stao“. Zato desna kolona sad uvek pokazuje i
+dokaz da sve radi:
+
+- Kad nema problema: **Sve u redu**, „Bez problema 5 dana. Provereno
+  upravo.“ (od kraja poslednjeg pravog problema; napomene se ne računaju).
+- Ispod toga **svi modeli**, po jedan red: tačka u boji stanja, ime, „u
+  redu“ / „problem“ / „hitno“ (i „neko je video“), i kad je stigao
+  poslednji rezultat. Klik na red prikaže model na grafikonu.
+- Kad ima problema, problemi su prvi, a spisak modela je ispod njih.
+
+Zelena je namerno mala: normalno stanje treba da bude tiho, a problem
+upadljiv.
+
 ## Šta je promenjeno u kodu
 
 | Fajl | Šta |
@@ -89,6 +105,7 @@ ponovo otvara i šalje mejl. To piše i u prozoru, da ne bude iznenađenje.
 | `app/alarmi/evidencija.py` | Pamti ko je rešio i kada. |
 | `app/alarmi/konfiguracija.py` | Polje `demo`. |
 | `app/baza.py`, `app/dodavanje.py` | Koji model je stigao iz kog fajla; prepoznavanje napuštenih modela. |
-| `index.html`, `pregled.js`, `stil.css` | Dugme i prozor „Rešio sam“. |
+| `index.html`, `pregled.js`, `stil.css` | Dugme i prozor „Rešio sam“; „Sve u redu“ i spisak modela desno. |
+| `app/dashboard/podaci.py` | `mirno_od`: od kad nema problema. |
 | `podesavanja.html`, `podesavanja.js` | Deo „Probni problem“ (vidi se samo uz `--demo`). |
-| `tests/test_demo.py` (novo) | 6 provera. |
+| `tests/test_demo.py` (novo) | 7 provera. |
