@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitoring modela</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="stil.css">
+  <script type="module" src="pregled.js"></script>
+</head>
+<body>
+  <header class="vrh">
+    <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg></div>
+    <h1>Monitoring modela</h1>
+    <p class="vrh__status" id="status" aria-live="polite"></p>
+    <a class="zupcanik" href="podesavanja.html" title="Podešavanja" aria-label="Podešavanja">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </a>
+  </header>
+
+  <main class="sadrzaj" id="sadrzaj">
+    <section class="plocice" aria-label="Ukratko">
+      <div class="plocica plocica--stanje" id="p-stanje">
+        <div class="lampa" id="p-stanje-lampa" aria-hidden="true"></div>
+        <div>
+          <p class="plocica__naziv">Stanje</p>
+          <p class="plocica__broj" id="p-stanje-broj">Učitavam…</p>
+          <p class="plocica__opis" id="p-stanje-opis"></p>
+        </div>
+      </div>
+      <div class="plocica" id="p-odstupanje">
+        <p class="plocica__naziv">Odstupanje od normalnog</p>
+        <p class="plocica__broj" id="p-odstupanje-broj">–</p>
+        <p class="plocica__opis" id="p-odstupanje-opis"></p>
+        <div class="plocica__grafik" id="p-odstupanje-grafik" aria-hidden="true"></div>
+      </div>
+      <div class="plocica" id="p-problemi">
+        <p class="plocica__naziv">Otvoreni problemi</p>
+        <p class="plocica__broj" id="p-problemi-broj">–</p>
+        <p class="plocica__opis" id="p-problemi-opis"></p>
+        <p class="plocica__opis plocica__opis--slabo" id="p-problemi-nedelja"></p>
+      </div>
+    </section>
+
+    <section class="glavno" id="glavno">
+      <div class="ploca ploca--grafik">
+        <div class="ploca__glava">
+          <div class="tabovi" id="tabovi" role="group" aria-label="Model"></div>
+          <label class="izvor-izbor" id="izvor-izbor" hidden>
+            <span>Izvor</span>
+            <select id="izvor"></select>
+          </label>
+          <div class="period" id="period" role="group" aria-label="Period">
+            <button type="button" data-dana="1">24 h</button>
+            <button type="button" data-dana="7">7 dana</button>
+            <button type="button" data-dana="30">30 dana</button>
+            <button type="button" data-dana="180">6 meseci</button>
+            <button type="button" data-dana="3660">sve</button>
+          </div>
+        </div>
+        <div class="poslednje">
+          <b id="poslednje-vrednost"></b>
+          <span id="poslednje-opis"></span>
+        </div>
+        <div class="grafik" id="grafik"></div>
+        <div class="legenda" id="legenda"></div>
+      </div>
+
+      <aside class="ploca problemi" aria-labelledby="problemi-naslov">
+        <div class="ploca__glava">
+          <h2 id="problemi-naslov">Problemi</h2>
+          <span class="znacka" id="problemi-broj"></span>
+        </div>
+        <div id="lista-problema"></div>
+      </aside>
+    </section>
+
+    <section class="ploca prazno-stanje" id="prazno" hidden>
+      <div class="prazno-stanje__ikona" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg></div>
+      <h2>Još nema podataka</h2>
+      <p id="prazno-tekst">Dodajte fajlove koje model pravi, pa će se ovde pojaviti stanje, grafikon i problemi.</p>
+      <a class="dugme" href="podesavanja.html">Dodaj podatke</a>
+    </section>
+  </main>
+
+  <dialog class="dijalog dijalog--malo" id="dijalog-ime" aria-labelledby="ime-naslov">
+    <form method="dialog" class="dijalog__sadrzaj" id="ime-forma">
+      <h2 id="ime-naslov">Kako se zovete?</h2>
+      <p class="dijalog__uvod">Da ostali vide ko je video problem. Pita se samo jednom.</p>
+      <label class="polje"><span>Ime</span><input type="text" id="ime-ulaz" maxlength="100" required autocomplete="name"></label>
+      <div class="dijalog__dugmad">
+        <button type="button" class="dugme dugme--tiho" id="ime-odustani">Odustani</button>
+        <button type="submit" class="dugme">U redu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="oblacic" id="tooltip" role="tooltip" hidden></div>
+  <div class="obavestenje" id="obavestenje" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

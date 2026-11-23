@@ -125,3 +125,36 @@ def test_proverava_se_samo_poslednjih_n_dana(podesavanja):
     tipovi = {(a.izvor, a.tip) for a in Evidencija(baza=Baza(k.baza)).alarmi}
     assert tipovi == {("M3", "pristrasnost"), ("M4", "prazne_vrednosti"), ("M5", "drift"),
                       ("M1", "promasen_skok"), ("Linija-2", "pad_tacnosti")}
+
+
+# --- više fajlova preko zvezdice i široke tabele (korak 6b) ---
+
+
+def test_zvezdica_u_putanji_i_siroka_tabela(tmp_path):
+    # Svaki eksperiment je nov fajl, a svaki senzor je kolona.
+    folder = tmp_path / "eksperimenti"
+    folder.mkdir()
+    for i, sat in enumerate([10, 11]):
+        redovi = ["vreme;Pritisak;Protok"]
+        redovi += [f"2026-11-10 {sat}:{m:02d}:00;1,{m % 3};32,{m % 5}" for m in range(60)]
+        (folder / f"{i}.csv").write_text("\n".join(redovi), encoding="utf-8")
+    k = Konfiguracija.model_validate({
+        "izvori": [{"putanja": str(folder / "*.csv"), "model": "pumpa",
+                    "kolone": ["Pritisak", "Protok"]}],
+        "baza": f"sqlite:///{tmp_path}/m.db",
+        "slanje": {"info": [], "upozorenje": [], "kriticno": []},
+    })
+    prvi = jedan_krug(k)
+    assert prvi.greske == []
+    assert prvi.novih_rezultata == 2 * 60 * 2  # 2 fajla x 60 redova x 2 senzora
+    assert jedan_krug(k).novih_rezultata == 0  # svaki fajl se prati posebno
+    izvori = {r.izvor for r in Baza(k.baza).citaj_rezultate("pumpa")}
+    assert izvori == {"Pritisak", "Protok"}
+
+
+def test_zvezdica_bez_ijednog_fajla_javlja_gresku(tmp_path):
+    k = Konfiguracija.model_validate({
+        "izvori": [{"putanja": str(tmp_path / "nema" / "*.csv"), "model": "x"}],
+        "baza": f"sqlite:///{tmp_path}/m.db",
+    })
+    assert any("nijedan fajl" in g for g in jedan_krug(k).greske)

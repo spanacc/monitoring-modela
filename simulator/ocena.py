@@ -36,12 +36,16 @@ class Ocena:
     lazni: list[Nalaz]
 
 
+# Pad tačnosti se bez stvarnih vrednosti vidi kao promena odgovora modela.
+SRODNI = {"pad_tacnosti": {"pad_tacnosti", "promena_kategorija"}}
+
+
 def poklapa(nalaz: Nalaz, problem: dict) -> bool:
-    """Isti tip, isti model i izvor, i vremena se bar delom preklapaju."""
+    """Isti (ili srodan) tip, isti model i izvor, i vremena se bar delom preklapaju."""
     od = datetime.fromisoformat(problem["od"])
     do = datetime.fromisoformat(problem["do"])
     return (
-        nalaz.tip == problem["tip"]
+        nalaz.tip in SRODNI.get(problem["tip"], {problem["tip"]})
         and nalaz.model == problem["model"]
         and nalaz.izvor == problem["izvor"]
         and nalaz.od < do

@@ -50,6 +50,8 @@ def test_trajanje():
     assert trajanje(timedelta(minutes=15)) == "15 min"
     assert trajanje(timedelta(hours=6)) == "6 h"
     assert trajanje(timedelta(days=3)) == "3 dana"
+    assert trajanje(timedelta(seconds=2)) == "2 s"  # merenja svake sekunde (korak 6b)
+    assert trajanje(timedelta(seconds=2.5)) == "2.5 s"
 
 
 # --- nema problema -> nema nalaza ---
@@ -156,3 +158,37 @@ def test_pad_tacnosti_za_kategorije():
     nalazi = proveri_sve(rez)
     assert tipovi(nalazi) == ["pad_tacnosti"]
     assert nalazi[0].opis.startswith("Tačnost je pala")
+
+
+# --- korak 7: kategorije bez stvarnih vrednosti ---
+
+
+def kategorije(n=600, seed=3):
+    """Model vraća 'ispravno' u 90% i 'kvar' u 10% slučajeva, bez stvarnih odgovora."""
+    rng = random.Random(seed)
+    return [Rezultat(vreme=T0 + i * SAT, model="m", izvor="L1", velicina="stanje",
+                     kategorija="kvar" if rng.random() < 0.1 else "ispravno")
+            for i in range(n)]
+
+
+def test_promena_odgovora_bez_stvarnih_vrednosti():
+    rez = kategorije()
+    # Poslednjih 5 dana model skoro uvek kaže "kvar".
+    for r in rez[-120:]:
+        r.kategorija = "kvar"
+    nalazi = proveri_sve(rez)
+    assert tipovi(nalazi) == ["promena_kategorija"]
+    assert "'kvar'" in nalazi[0].opis and "normalnom periodu" in nalazi[0].opis
+
+
+def test_mirne_kategorije_nemaju_nalaza():
+    assert proveri_sve(kategorije()) == []
+
+
+def test_lep_broj():
+    from app.provere.osnova import lep_broj
+    assert lep_broj(4940) == "4.940"
+    assert lep_broj(63.46) == "63,5"
+    assert lep_broj(0.00123) == "0,00123"
+    assert lep_broj(22.0) == "22"
+    assert lep_broj(-3.25, "°C") == "−3,25 °C"

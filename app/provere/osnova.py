@@ -1,3 +1,22 @@
+"""
+Zajedničke stvari za sve provere: nalaz, podešavanja, granice i pomoćne funkcije.
+
+GLAVNA IDEJA
+------------
+Ne znamo ništa o modelu, pa ne znamo ni šta je za njega normalno, ni
+koliko odstupanje je previše. Zato aplikacija oba ta podatka uči sama:
+
+1. Iz NORMALNOG PERIODA (početak podataka) nauči kako se model ponaša kad
+   je sve u redu: koliko često stižu rezultati, koliko vrednosti odskaču,
+   kolika je greška...
+2. Granicu za alarm postavi na `rezerva` puta više od najgoreg što se
+   desilo u normalnom periodu.
+
+To radi kalibracija.py, posebno za svaki izvor. Čovek podešava samo
+rezervu (koliko je aplikacija osetljiva) i koji period je normalan.
+"""
+
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -71,6 +90,10 @@ class Granice:
     drift_dozvoljeno: float | None = None  # koliko sme da se pomeri od toga
     stopa_gresaka: float | None = None  # za kategorije: normalna stopa grešaka
     dozvoljen_rast_stope: float | None = None  # koliko sme da poraste
+    # Za kategorije bez stvarnih vrednosti: koliki deo odgovora je obično
+    # svaka kategorija, i koliko taj deo sme da se pomeri.
+    udeli_kategorija: dict[str, float] | None = None
+    dozvoljen_pomak_udela: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +166,28 @@ def u_intervale(vremena: list[datetime], korak: timedelta) -> list[tuple[datetim
     return intervali
 
 
+def lep_broj(x: float, jedinica: str | None = None) -> str:
+    """
+    Broj za čoveka, u srpskom zapisu, sa oko tri značajne cifre i nikad u
+    naučnom zapisu: 4940 -> '4.940', 63.46 -> '63,5', 0.00123 -> '0,00123'.
+    """
+    if x == 0 or not math.isfinite(x):
+        tekst = "0" if x == 0 else str(x)
+    else:
+        decimala = max(0, 2 - math.floor(math.log10(abs(x))))
+        tekst = f"{x:,.{decimala}f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+        if "," in tekst:
+            tekst = tekst.rstrip("0").rstrip(",")  # 22,0 -> 22; 0,500 -> 0,5
+        tekst = tekst.replace("-", "−")  # pravi znak minus
+    return f"{tekst} {jedinica}" if jedinica else tekst
+
+
 def trajanje(td: timedelta) -> str:
-    """timedelta(hours=6) -> '6 h'. Za poruke koje čita čovek."""
-    minuta = round(td.total_seconds() / 60)
+    """timedelta(hours=6) -> '6 h', timedelta(seconds=2) -> '2 s'. Za poruke koje čita čovek."""
+    sekundi = td.total_seconds()
+    if sekundi < 60:  # merenja svake sekunde: "0 min" ne bi ništa reklo
+        return f"{round(sekundi, 1):g} s"
+    minuta = round(sekundi / 60)
     if minuta < 60:
         return f"{minuta} min"
     if minuta < 48 * 60:

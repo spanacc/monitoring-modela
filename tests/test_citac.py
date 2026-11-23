@@ -102,15 +102,62 @@ def test_rucno_mapiranje_se_cuva_i_koristi(tmp_path):
     putanja = napisi(tmp_path, "m.csv",
                      "t,kol1,kol2\n2026-11-10T14:00:00Z,10,11\n")
     m = ucitaj_csv(putanja).mapiranje
-    assert m.polja["vrednost"] == "kol1"  # pogodio je prvu, a to nije tačno
+    assert m.polja["vrednost"] == "kol2"  # pogodio je poslednju, a to nije tačno
 
     # Čovek ispravi mapiranje u JSON fajlu...
-    m.polja["vrednost"] = "kol2"
-    m.polja["stvarna_vrednost"] = "kol1"
+    m.polja["vrednost"] = "kol1"
+    m.polja["stvarna_vrednost"] = "kol2"
     json_putanja = tmp_path / "mapiranje.json"
     m.sacuvaj(json_putanja)
 
     # ...i aplikacija ga od tada koristi.
     r = ucitaj_csv(putanja, mapiranje=Mapiranje.ucitaj(json_putanja)).rezultati[0]
-    assert r.vrednost == 11
-    assert r.stvarna_vrednost == 10
+    assert r.vrednost == 10
+    assert r.stvarna_vrednost == 11
+
+
+# --- široka tabela: svaka kolona je poseban izvor (korak 6b) ---
+
+
+def test_siroka_tabela_svaka_kolona_je_izvor(tmp_path):
+    putanja = napisi(tmp_path, "pumpa.csv",
+                     "datetime;Pritisak;Protok;Temperatura\n"
+                     "2026-11-10 14:00:00;1,2;32,0;70,1\n"
+                     "2026-11-10 14:00:01;1,3;31,9;70,2\n")
+    ucitano = ucitaj_csv(putanja, kolone=["Pritisak", "Protok"])
+    assert len(ucitano.rezultati) == 4  # 2 reda x 2 kolone
+    assert {r.izvor for r in ucitano.rezultati} == {"Pritisak", "Protok"}
+    assert [r.vrednost for r in ucitano.rezultati if r.izvor == "Protok"] == [32.0, 31.9]
+
+
+def test_siroka_tabela_sve_brojcane_kolone(tmp_path):
+    putanja = napisi(tmp_path, "pumpa.csv",
+                     "vreme,A,B,napomena\n2026-11-10 14:00,1,2,ok\n2026-11-10 14:01,3,4,ok\n")
+    izvori = {r.izvor for r in ucitaj_csv(putanja, kolone=["sve"]).rezultati}
+    assert izvori == {"A", "B"}  # "napomena" nije broj, a vreme se ne računa
+
+
+def test_siroka_tabela_sa_pogresnom_kolonom(tmp_path):
+    putanja = napisi(tmp_path, "pumpa.csv", "vreme,A\n2026-11-10 14:00,1\n")
+    with pytest.raises(ValueError, match="nema kolona: Protok"):
+        ucitaj_csv(putanja, kolone=["Protok"])
+
+
+# --- korak 7 ---
+
+
+def test_datum_i_sat_se_spajaju(tmp_path):
+    putanja = napisi(tmp_path, "sati.csv",
+                     "dteday,hr,cnt\n" + "".join(f"2011-01-01,{h},{10 + h}\n" for h in range(24))
+                     + "".join(f"2011-01-02,{h},{20 + h}\n" for h in range(24)))
+    u = ucitaj_csv(putanja)
+    assert u.mapiranje.polja["doba_dana"] == "hr"
+    assert len({r.vreme for r in u.rezultati}) == 48  # svaki sat je svoj trenutak
+    assert u.rezultati[13].vreme.hour == 13
+
+
+def test_samo_godina_kao_vreme_kad_je_kolona_rucno_izabrana(tmp_path):
+    putanja = napisi(tmp_path, "g.csv", "year,pred\n2007,1.5\n2008,1.7\n2009,1.9\n")
+    m = Mapiranje(polja={"vreme": "year", "vrednost": "pred"})
+    u = ucitaj_csv(putanja, mapiranje=m)
+    assert [r.vreme.year for r in u.rezultati] == [2007, 2008, 2009] and not u.greske

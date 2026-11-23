@@ -1,3 +1,20 @@
+"""
+Provere tačnosti i ponašanja modela.
+
+- pristrasnost:  model stalno greši u istom smeru (npr. uvek predviđa više)
+- drift:         model vremenom postaje lošiji, ili mu se ponašanje menja
+- promasen_skok: model je naglo i jako promašio (npr. nije video nagli skok)
+- pad_tacnosti:  isto što i drift, ali za modele koji vraćaju kategorije
+
+Sve granice dolaze iz kalibracije (naučene iz normalnog perioda). Ovde se
+samo poredi "sada" sa tim granicama.
+
+Za pristrasnost, promašen skok i pad tačnosti potrebne su stvarne
+vrednosti. Drift radi i bez njih: tada prati samo da li su se vrednosti
+koje model vraća pomerile. Tako aplikacija nešto korisno javlja i ako
+stvarne vrednosti nikad ne dobijemo.
+"""
+
 from datetime import datetime
 from statistics import mean, median
 
@@ -7,6 +24,7 @@ from app.provere.osnova import (
     Ozbiljnost,
     Podesavanja,
     Tacke,
+    lep_broj,
     napravi,
     odskoci_od_suseda,
     prozori,
@@ -67,6 +85,26 @@ def kategorije_tacke(serija: list[Rezultat]) -> Tacke:
             if r.kategorija is not None and r.stvarna_kategorija is not None]
 
 
+def kategorije_odgovori(serija: list[Rezultat]) -> list[tuple[datetime, str]]:
+    """Sve kategorije koje je model vratio, sa vremenom (i bez stvarnih vrednosti)."""
+    return [(r.vreme, r.kategorija) for r in serija if r.kategorija is not None]
+
+
+def udeli(prozor: list[tuple[datetime, str]]) -> dict[str, float]:
+    """Koliki deo odgovora u prozoru je koja kategorija: {'kvar': 0.1, 'ispravno': 0.9}."""
+    n = len(prozor)
+    brojevi: dict[str, int] = {}
+    for _, k in prozor:
+        brojevi[k] = brojevi.get(k, 0) + 1
+    return {k: b / n for k, b in brojevi.items()}
+
+
+def najveci_pomak(udeo: dict[str, float], normalno: dict[str, float]) -> tuple[str, float]:
+    """Kategorija čiji se udeo najviše pomerio od normalnog, i za koliko."""
+    kat = max(set(udeo) | set(normalno), key=lambda k: abs(udeo.get(k, 0) - normalno.get(k, 0)))
+    return kat, udeo.get(kat, 0) - normalno.get(kat, 0)
+
+
 def periodi(svi_prozori: list[Tacke], oznake: list[bool]) -> list[tuple[datetime, datetime]]:
     """
     Spaja uzastopne označene prozore u periode. Zadržava samo periode od
@@ -115,11 +153,10 @@ def proveri_pristrasnost(serija: list[Rezultat], g: Granice, p: Podesavanja,
 
     pomak = mean(e for _, e in tacke)
     smer = "veće" if pomak > 0 else "manje"
-    jedinica = f" {serija[0].jedinica}" if serija[0].jedinica else ""
     return [napravi(
         "pristrasnost", serija, tacke[0][0], tacke[-1][0], Ozbiljnost.UPOZORENJE,
         f"Model stalno daje {smer} vrednosti od stvarnih, "
-        f"u proseku za {abs(pomak):.3g}{jedinica}.",
+        f"u proseku za {lep_broj(abs(pomak), serija[0].jedinica)}.",
     )]
 
 
@@ -194,5 +231,35 @@ def proveri_pad_tacnosti(serija: list[Rezultat], g: Granice) -> list[Nalaz]:
         nalazi.append(napravi(
             "pad_tacnosti", serija, od, do, Ozbiljnost.UPOZORENJE,
             f"Tačnost je pala sa {1 - g.stopa_gresaka:.0%} na {1 - mean(u_periodu):.0%}.",
+        ))
+    return nalazi
+
+
+def proveri_promenu_kategorija(serija: list[Rezultat], g: Granice) -> list[Nalaz]:
+    """
+    Za modele koji vraćaju kategorije, a stvarni odgovor nije poznat.
+
+    Prati koliki deo odgovora je koja kategorija. Ako se taj odnos u dva
+    prozora zaredom pomeri više nego što se ikad pomerao u normalnom
+    periodu (puta rezerva), model se ponaša drugačije: npr. odjednom za
+    80% slučajeva kaže "kvar", a ranije za 10%. Ne zna se da li je model
+    pogrešio ili se stvarnost promenila, ali čovek treba da pogleda.
+    """
+    if g.dozvoljen_pomak_udela is None:
+        return []
+    kasnije = [(t, k) for t, k in kategorije_odgovori(serija) if t > g.kraj_osnove]
+    kasniji = prozori(kasnije, g.prozor)
+    oznake = [abs(najveci_pomak(udeli(pr), g.udeli_kategorija)[1]) > g.dozvoljen_pomak_udela
+              for pr in kasniji]
+
+    nalazi = []
+    for od, do in periodi(kasniji, oznake):
+        u_periodu = udeli([(t, k) for t, k in kasnije if od <= t <= do])
+        kat, pomak = najveci_pomak(u_periodu, g.udeli_kategorija)
+        nalazi.append(napravi(
+            "promena_kategorija", serija, od, do, Ozbiljnost.UPOZORENJE,
+            f"Model daje odgovor '{kat}' u {u_periodu.get(kat, 0):.0%} slučajeva, a u normalnom "
+            f"periodu u {g.udeli_kategorija.get(kat, 0):.0%}. Stvarni odgovori nisu poznati, pa se "
+            "ne zna da li je model pogrešio ili se stvarnost promenila.",
         ))
     return nalazi

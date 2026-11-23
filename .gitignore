@@ -15,6 +15,10 @@ __pycache__/
 .env
 *.secret
 
+# Prava podešavanja nadzora (adrese, serveri). Na git ide samo primer:
+# konfiguracija.primer.json
+konfiguracija.json
+
 # Fajlovi editora i operativnog sistema
 .vscode/
 .idea/

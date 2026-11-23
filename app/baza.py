@@ -1,3 +1,37 @@
+"""
+Baza podataka: čuva sve rezultate i sve alarme.
+
+ZAŠTO BAZA
+----------
+1. Istorija ostaje. Ako model svaki dan prepisuje svoj fajl, bez baze bi
+   stari rezultati nestali, a sa njima i normalni period.
+2. Iz baze se čita samo ono što treba (npr. poslednjih 30 dana), pa nadzor
+   ostaje brz i kad se skupe godine podataka.
+3. Alarmi su na jednom mestu, odakle će ih čitati i dashboard (korak 6).
+
+KOJA BAZA
+---------
+Za probu SQLite: obična datoteka (data/monitoring.db), ništa ne mora da se
+instalira. Kod je pisan preko biblioteke SQLAlchemy, pa se za pravi rad
+može preći na PostgreSQL (ili bazu koju IT odredi) promenom samo adrese
+u konfiguraciji, npr:
+
+    sqlite:///data/monitoring.db                      (proba)
+    postgresql+psycopg://korisnik@server/monitoring   (pravi rad)
+
+VREME
+-----
+Sva vremena se u bazu upisuju u UTC. SQLite inače tiho odbacuje vremensku
+zonu, pa bi 14:00 po beogradskom vremenu postalo 14:00 bez zone, što je
+pogrešan trenutak. Pri čitanju se zona UTC vraća.
+
+UVOZ SAMO NOVIH REDOVA
+----------------------
+Svaki rezultat pamti iz kog fajla je došao i koji je po redu u njemu.
+Kad se fajl ponovo pročita, upisuju se samo rezultati posle poslednjeg
+već upisanog. Pretpostavka: model fajl samo DOPISUJE (nove redove na kraj).
+"""
+
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -113,6 +147,12 @@ class Baza:
             if novi:
                 veza.execute(insert(rezultati), novi)
         return len(novi)
+
+    def obrisi_model(self, model: str) -> None:
+        """Briše sve rezultate i alarme jednog modela (kad se izvor ukloni sa dashboarda)."""
+        with self.motor.begin() as veza:
+            veza.execute(delete(rezultati).where(rezultati.c.model == model))
+            veza.execute(delete(alarmi).where(alarmi.c.model == model))
 
     def modeli(self) -> list[str]:
         with self.motor.connect() as veza:

@@ -1,5 +1,35 @@
+"""
+Nadzor: srce aplikacije. Jedan "krug" nadzora je:
+
+    1. upiši nove rezultate iz svih izvora u bazu      (koraci 2 i 5)
+    2. iz baze pročitaj ono što treba i proveri         (koraci 3 i 5)
+    3. uskladi nalaze sa evidencijom alarma             (korak 4)
+    4. pošalji obaveštenja za nove alarme               (korak 4)
+
+KAKO SE KORISTI
+---------------
+    python -m app.nadzor                              # jedan krug
+    python -m app.nadzor --ponavljaj 60               # krug na svakih 60 sekundi
+    python -m app.nadzor --sada podaci                # za simulirane (stare) podatke
+    python -m app.nadzor --konfiguracija moja.json
+
+ŠTA ZNAČI --sada podaci
+-----------------------
+Da bi primetila "tišinu" (model prestao da šalje), aplikacija poredi
+poslednji rezultat sa trenutnim vremenom. Simulirani podaci su iz prošlosti,
+pa bi za njih odmah javila da je svaki model "ućutao". Sa `--sada podaci`
+se kao "sada" uzima vreme poslednjeg rezultata, pa tišina ne smeta probi.
+U pravom radu ova opcija se NE koristi.
+
+BRZINA
+------
+Iz baze se čita samo normalni period (za učenje granica) i poslednjih
+`dana_provere` dana (za proveru). Zato krug traje isto i posle godina rada,
+bez obzira na to koliko se istorije skupilo.
+"""
 
 import argparse
+import glob
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -10,7 +40,6 @@ from app.alarmi.evidencija import Alarm, Evidencija
 from app.alarmi.konfiguracija import Konfiguracija, ucitaj_konfiguraciju
 from app.baza import Baza
 from app.citac import ucitaj_csv
-from app.prepoznavanje import Mapiranje
 from app.provere import Nalaz, proveri_sve
 
 
@@ -35,29 +64,38 @@ def jedan_krug(k: Konfiguracija, sada: datetime | None = None) -> Izvestaj:
     izvestaj = Izvestaj()
     baza = Baza(k.baza)
 
-    # 1. Uvoz u bazu. Ako jedan izvor ne valja, ostali se i dalje uvoze.
+    # 1. Uvoz u bazu. Ako jedan fajl ne valja, ostali se i dalje uvoze.
     for izvor in k.izvori:
-        try:
-            mapiranje = Mapiranje.ucitaj(izvor.mapiranje) if izvor.mapiranje else None
-            ucitano = ucitaj_csv(izvor.putanja, izvor.model, mapiranje, k.zona)
-            izvestaj.novih_rezultata += baza.upisi_rezultate(str(izvor.putanja), ucitano.rezultati)
-        except (OSError, ValueError) as e:
-            izvestaj.greske.append(f"Izvor {izvor.putanja}: {e}")
+        putanje = fajlovi(izvor.putanja)
+        if not putanje:
+            izvestaj.greske.append(f"Izvor {izvor.putanja}: nijedan fajl ne odgovara ovoj putanji.")
+        for putanja in putanje:
+            try:
+                mapiranje = izvor.napravi_mapiranje()
+                ucitano = ucitaj_csv(putanja, izvor.model, mapiranje, k.zona, izvor.kolone)
+                izvestaj.novih_rezultata += baza.upisi_rezultate(str(putanja), ucitano.rezultati)
+            except (OSError, ValueError) as e:
+                izvestaj.greske.append(f"Izvor {putanja}: {e}")
 
     # 2. Provere iz baze, svaki model sa svojom osetljivošću.
     nalazi: list[Nalaz] = []
+    istorijski = k.istorijski_modeli()
     for model in baza.modeli():
         p = k.podesavanja_za(model)
         prvo, poslednje = baza.prvo_i_poslednje(model)
-        kraj = sada or poslednje
+        # Za stare podatke (proba, arhiva) "sada" je poslednji rezultat.
+        sada_modela = None if model in istorijski else sada
+        kraj = sada_modela or poslednje
 
-        # Čita se samo normalni period i poslednjih `dana_provere` dana.
-        pocetak = kraj - timedelta(days=k.dana_provere) if k.dana_provere else None
+        # Čita se samo normalni period i poslednjih `dana_provere` dana. Stari
+        # podaci (proba, arhiva) se proveravaju celi: tu se gleda istorija.
+        pocetak = (kraj - timedelta(days=k.dana_provere)
+                   if k.dana_provere and model not in istorijski else None)
         kraj_osnove = prvo + timedelta(days=p.dana_osnove) if p.dana_osnove else None
         rezultati = baza.citaj_rezultate(model, kraj_osnove, pocetak)
         izvestaj.provereno += len(rezultati)
 
-        njegovi = proveri_sve(rezultati, p, sada)
+        njegovi = proveri_sve(rezultati, p, sada_modela)
         if pocetak:
             njegovi = [n for n in njegovi if u_periodu_provere(n, pocetak)]
         nalazi += njegovi
@@ -65,7 +103,10 @@ def jedan_krug(k: Konfiguracija, sada: datetime | None = None) -> Izvestaj:
 
     # 3. Usklađivanje sa evidencijom.
     evidencija = Evidencija(baza=baza)
-    izvestaj.novih_alarma = len(evidencija.uskladi(nalazi, datetime.now(timezone.utc)))
+    # Problemi koje provere više ne nalaze sami se zatvaraju, ali samo kad je
+    # krug prošao bez greške (inače bi nedostupan fajl "rešio" sve alarme).
+    izvestaj.novih_alarma = len(evidencija.uskladi(nalazi, datetime.now(timezone.utc),
+                                                   zatvori_nestale=not izvestaj.greske))
 
     # 4. Slanje. Uspešno poslati alarmi više ne čekaju.
     posalji_obavestenja(evidencija, k, izvestaj)
@@ -73,6 +114,17 @@ def jedan_krug(k: Konfiguracija, sada: datetime | None = None) -> Izvestaj:
     evidencija.sacuvaj()
     izvestaj.otvorenih_alarma = len(evidencija.otvoreni())
     return izvestaj
+
+
+def fajlovi(putanja: Path) -> list[Path]:
+    """
+    Fajlovi jednog izvora. Putanja sa zvezdicom (npr. data/*.csv) znači sve
+    takve fajlove: korisno kad model svaki dan (ili svaki eksperiment) piše
+    nov fajl. Svaki fajl se u bazu uvozi zasebno, samo njegovi novi redovi.
+    """
+    if any(znak in str(putanja) for znak in "*?["):
+        return [Path(p) for p in sorted(glob.glob(str(putanja)))]
+    return [Path(putanja)]
 
 
 def u_periodu_provere(n: Nalaz, pocetak: datetime) -> bool:

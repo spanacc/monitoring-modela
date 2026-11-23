@@ -95,3 +95,21 @@ def test_cuvanje_i_ucitavanje(tmp_path):
 def test_nepostojeci_alarm(ev):
     with pytest.raises(KeyError):
         ev.potvrdi(42, "Veljko")
+
+
+# --- korak 7: problem koji prođe sam se zatvara ---
+
+
+def test_problem_koji_provere_vise_ne_nalaze_se_sam_zatvara(ev):
+    ev.uskladi([nalaz(izvor="A"), nalaz(izvor="B")], T0, zatvori_nestale=True)
+    assert all(a.status == StatusAlarma.OTVOREN for a in ev.alarmi)  # novi se ne zatvaraju odmah
+    ev.uskladi([nalaz(izvor="A", do=8)], T0 + 2 * SAT, zatvori_nestale=True)
+    a, b = ev.alarmi
+    assert a.status == StatusAlarma.OTVOREN and a.do == T0 + 8 * SAT
+    assert b.status == StatusAlarma.RESEN and b.napomena == Evidencija.PRESTALO
+
+
+def test_bez_zatvori_nestale_nista_se_ne_zatvara(ev):
+    ev.uskladi([nalaz(izvor="A")], T0)
+    ev.uskladi([], T0 + SAT)  # npr. krug sa greškom: ne sme da "reši" alarm
+    assert ev.alarmi[0].status == StatusAlarma.OTVOREN

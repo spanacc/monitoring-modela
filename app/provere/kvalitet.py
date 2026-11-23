@@ -1,3 +1,13 @@
+"""
+Provere kvaliteta podataka: da li su rezultati koji stižu upotrebljivi.
+
+- prazne_vrednosti:  rezultat je stigao, ali bez vrednosti
+- nemoguca_vrednost: vrednost naglo odskače od susednih, više nego što je
+                     ikad odskakala u normalnom periodu
+
+Ni ove provere ne zahtevaju stvarne vrednosti.
+"""
+
 from datetime import datetime
 
 from app.provere.osnova import (
@@ -5,6 +15,7 @@ from app.provere.osnova import (
     Nalaz,
     Ozbiljnost,
     Tacke,
+    lep_broj,
     napravi,
     odskoci_od_suseda,
     u_intervale,
@@ -51,7 +62,7 @@ def proveri_nemoguce(serija: list[Rezultat], g: Granice) -> list[Nalaz]:
     tacke = nemoguce_tacke(serija, g)
     return [
         napravi("nemoguca_vrednost", serija, od, do, Ozbiljnost.UPOZORENJE,
-                f"Vrednost {tacke[od]:g} naglo odskače od susednih vrednosti, "
-                "više nego bilo šta u normalnom periodu.")
+                f"Vrednost {lep_broj(tacke[od], serija[0].jedinica)} naglo odskače od susednih "
+                "vrednosti, više nego bilo šta u normalnom periodu.")
         for od, do in u_intervale(list(tacke), g.korak)
     ]

@@ -1,3 +1,33 @@
+"""
+Kalibracija: aplikacija sama računa granice za alarme.
+
+ŠTA JE OVO
+----------
+Za svaku seriju (model + izvor) uzimamo NORMALNI PERIOD (početak podataka)
+i gledamo kako se model tada ponašao:
+
+    - najduža pauza između dva rezultata
+    - koliko je najviše neka vrednost odskočila od svojih suseda
+    - koliko je najviše greška odskočila od svojih suseda
+    - koliko se najviše menjala tipična greška (ili vrednost) iz dana u dan
+    - koliko se najviše menjala stopa pogrešnih kategorija
+
+Granica za alarm je `rezerva` puta više od toga. Primer: ako je u normalnom
+periodu najduža pauza bila 1 sat, a rezerva je 2, izostanak je pauza duža
+od 2 sata. Za model kome su pauze normalno do 5 sati, granica je 10 sati.
+
+ZAŠTO
+-----
+Tako nijedna granica nije izmišljena. Svaka je izvedena iz ponašanja baš
+tog modela, na baš tom izvoru. Čovek bira samo rezervu, odnosno koliko je
+aplikacija osetljiva.
+
+PRETPOSTAVKA
+------------
+Normalni period je zaista bio normalan. Ako je model već tada imao
+problem, aplikacija će ga naučiti kao normalno stanje.
+"""
+
 from datetime import datetime, timedelta
 from statistics import mean
 
@@ -7,11 +37,20 @@ from app.provere.osnova import (
     Podesavanja,
     Tacke,
     klizni_prozori,
+    lep_broj,
     ocekivani_korak,
     odskoci_od_suseda,
     trajanje,
 )
-from app.provere.tacnost import greske, kategorije_tacke, stat_prozora, tacke_za_drift
+from app.provere.tacnost import (
+    greske,
+    kategorije_odgovori,
+    kategorije_tacke,
+    najveci_pomak,
+    stat_prozora,
+    tacke_za_drift,
+    udeli,
+)
 from app.schema import Rezultat
 
 # Najmanje rezultata u normalnom periodu da bi se granica uopšte učila.
@@ -40,6 +79,15 @@ def kalibrisi(serija: list[Rezultat], p: Podesavanja) -> Granice | None:
     # Prozor: otprilike jedan dan rezultata, jer mnogi podaci imaju dnevni
     # ciklus, pa se tako ciklus poništi. Najmanje NAJMANJE_TACAKA rezultata.
     prozor = max(round(timedelta(days=1) / korak), NAJMANJE_TACAKA)
+
+    # Kod čestih merenja (npr. svake sekunde) dan bi bio duži od celog
+    # normalnog perioda: drift tada ne bi imao iz čega da uči, a odskok od
+    # suseda bi se poredio sa celom serijom (i bio bi vrlo spor). Tada je
+    # prozor 1/50 normalnog perioda, pa se normalno ponašanje uči iz
+    # pedesetak prozora. Za podatke na sat, dan ili 15 minuta ništa se ne menja.
+    u_osnovi = sum(1 for r in serija if r.vreme <= kraj)
+    if u_osnovi < 2 * prozor:
+        prozor = max(u_osnovi // 50, NAJMANJE_TACAKA)
 
     # --- izostanak: najduža pauza u normalnom periodu ---
     vremena = sorted({r.vreme for r in serija if r.vreme <= kraj})
@@ -76,6 +124,14 @@ def kalibrisi(serija: list[Rezultat], p: Podesavanja) -> Granice | None:
         # kad model u normalnom periodu nikad nije pogrešio.
         g.dozvoljen_rast_stope = p.rezerva * max(najvece_kolebanje, 1 / prozor)
 
+    # --- promena odgovora: kad stvarnih kategorija nema, prati se odnos kategorija ---
+    odgovori = [(t, k) for t, k in kategorije_odgovori(serija) if t <= kraj]
+    if g.dozvoljen_rast_stope is None and len(odgovori) >= 2 * prozor:
+        g.udeli_kategorija = udeli(odgovori)
+        najvece = max(abs(najveci_pomak(udeli(pr), g.udeli_kategorija)[1])
+                      for pr in klizni_prozori(odgovori, prozor))
+        g.dozvoljen_pomak_udela = p.rezerva * max(najvece, 1 / prozor)
+
     return g
 
 
@@ -93,21 +149,26 @@ def granica_odskoka(tacke: Tacke, kraj: datetime, prozor: int, rezerva: float) -
 
 def opisi_granice(serija: list[Rezultat], g: Granice) -> list[str]:
     """Naučene granice rečima, da čovek vidi šta je aplikacija zaključila."""
-    j = f" {serija[0].jedinica}" if serija[0].jedinica else ""
+    j = serija[0].jedinica
     redovi = [
         f"normalni period: do {g.kraj_osnove:%d.%m.%Y %H:%M} (UTC)",
         f"rezultati obično stižu na svakih {trajanje(g.korak)}",
         f"izostanak: pauza duža od {trajanje(g.max_pauza)}",
     ]
     if g.max_odskok_vrednosti is not None:
-        redovi.append(f"nemoguća vrednost: odskok od susednih veći od {g.max_odskok_vrednosti:.3g}{j}")
+        redovi.append(f"neobična vrednost: odskok od susednih veći od {lep_broj(g.max_odskok_vrednosti, j)}")
     if g.max_odskok_greske is not None:
-        redovi.append(f"promašen skok: greška odskoči od susednih više od {g.max_odskok_greske:.3g}{j}")
+        redovi.append(f"veliki promašaj: greška odskoči od susednih više od {lep_broj(g.max_odskok_greske, j)}")
     if g.drift_dozvoljeno is not None:
         sta = "tipična greška" if g.drift_po_greski else "prosečna vrednost"
-        redovi.append(f"drift: {sta} se pomeri za više od {g.drift_dozvoljeno:.3g}{j} "
-                      f"(normalno je oko {g.drift_sredina:.3g}{j})")
+        redovi.append(f"promena ponašanja: {sta} se pomeri za više od {lep_broj(g.drift_dozvoljeno, j)} "
+                      f"(normalno je oko {lep_broj(g.drift_sredina, j)})")
     if g.dozvoljen_rast_stope is not None:
         redovi.append(f"pad tačnosti: stopa grešaka poraste sa {g.stopa_gresaka:.0%} "
                       f"na više od {g.stopa_gresaka + g.dozvoljen_rast_stope:.0%}")
+    if g.dozvoljen_pomak_udela is not None:
+        obicno = ", ".join(f"'{k}' {u:.0%}" for k, u in
+                           sorted(g.udeli_kategorija.items(), key=lambda x: -x[1])[:3])
+        redovi.append(f"promena odgovora: udeo neke kategorije se pomeri za više od "
+                      f"{g.dozvoljen_pomak_udela:.0%} (obično: {obicno})")
     return redovi

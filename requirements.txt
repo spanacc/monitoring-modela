@@ -15,3 +15,12 @@ sqlalchemy>=2.0,<3
 
 # pytest: pokreće automatske provere (testove).
 pytest>=8,<10
+
+# fastapi: mali veb server za dashboard (korak 6).
+fastapi>=0.115,<1
+
+# uvicorn: program koji pokreće veb server.
+uvicorn>=0.30,<1
+
+# httpx: potreban testovima, da "glume" pregledač koji pita server.
+httpx>=0.27,<1

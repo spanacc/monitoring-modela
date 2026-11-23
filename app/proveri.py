@@ -20,11 +20,13 @@ def main() -> None:
                         help="osetljivost: veći broj = manje alarma")
     parser.add_argument("--granice", action="store_true",
                         help="ispiši granice koje je aplikacija naučila")
+    parser.add_argument("--kolone", nargs="+", metavar="KOLONA",
+                        help="široka tabela: svaka kolona je poseban izvor ('sve' = sve brojčane)")
     args = parser.parse_args()
 
     mapiranje = Mapiranje.ucitaj(args.mapiranje) if args.mapiranje else None
     try:
-        ucitano = ucitaj_csv(args.putanja, args.model, mapiranje, args.zona)
+        ucitano = ucitaj_csv(args.putanja, args.model, mapiranje, args.zona, args.kolone)
     except ValueError as e:
         raise SystemExit(f"Greška: {e}")
 

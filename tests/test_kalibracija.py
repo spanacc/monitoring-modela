@@ -89,7 +89,7 @@ def test_granice_se_mogu_opisati_recima():
     redovi = opisi_granice(rez, kalibrisi(rez, Podesavanja()))
     assert "rezultati obično stižu na svakih 1 h" in redovi
     assert "izostanak: pauza duža od 2 h" in redovi
-    assert any(red.startswith("drift:") for red in redovi)
+    assert any(red.startswith("promena ponašanja:") for red in redovi)
 
 
 def test_fiksan_normalni_period_se_ne_pomera():
@@ -103,3 +103,28 @@ def test_fiksan_normalni_period_se_ne_pomera():
     po_udelu_kratko = kalibrisi(serija(n=300), Podesavanja())
     po_udelu_dugo = kalibrisi(serija(n=900), Podesavanja())
     assert po_udelu_kratko.kraj_osnove < po_udelu_dugo.kraj_osnove
+
+
+# --- česta merenja (korak 6b) ---
+
+
+def test_cesta_merenja_imaju_kraci_prozor():
+    # Merenja svake sekunde, dva sata. Prozor od "jednog dana" bio bi duži od
+    # celog normalnog perioda, pa drift ne bi mogao da radi. Zato se skrati.
+    rng = random.Random(3)
+    rezultati = []
+    for i in range(7200):
+        pomak = 5.0 if 5400 <= i < 6000 else 0.0  # 10 minuta vrednost je viša za 5
+        rezultati.append(Rezultat(vreme=T0 + timedelta(seconds=i), model="m", izvor="A",
+                                  velicina="x", vrednost=50 + rng.gauss(0, 1) + pomak))
+    g = kalibrisi(rezultati, Podesavanja())
+    assert g.prozor < 100  # a ne 86.400, koliko sekundi ima jedan dan
+
+    drift = [n for n in proveri_sve(rezultati, Podesavanja()) if n.tip == "drift"]
+    assert drift  # pomak je pronađen...
+    assert all(T0 + timedelta(seconds=5300) <= n.od and n.do <= T0 + timedelta(seconds=6100)
+               for n in drift)  # ...i samo on
+
+
+def test_prozor_za_podatke_na_sat_se_ne_menja():
+    assert kalibrisi(serija(korak=timedelta(hours=1)), Podesavanja()).prozor == 24

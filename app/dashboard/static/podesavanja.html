@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Podešavanja – Monitoring modela</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="stil.css">
+  <script type="module" src="podesavanja.js"></script>
+</head>
+<body>
+  <header class="vrh">
+    <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg></div>
+    <h1>Podešavanja</h1>
+    <a class="dugme dugme--tiho" href="./">Nazad na pregled</a>
+  </header>
+
+  <main class="sadrzaj sadrzaj--usko" id="sadrzaj">
+    <section class="ploca">
+      <div class="ploca__glava">
+        <div>
+          <h2>Šta se prati</h2>
+          <p class="ploca__opis">Fajlovi koje model pravi. Aplikacija ih samo čita i ništa u njima ne menja.</p>
+        </div>
+        <button type="button" class="dugme desno" id="dodaj">Dodaj podatke</button>
+      </div>
+      <ul class="praceno__lista" id="praceno-lista"></ul>
+    </section>
+
+    <section class="ploca">
+      <div class="ploca__glava">
+        <div>
+          <h2>Provera</h2>
+          <p class="ploca__opis" id="provera-opis">Radi sama. Ovde se može pokrenuti odmah, bez čekanja.</p>
+        </div>
+        <button type="button" class="dugme dugme--tiho desno" id="proveri">Proveri sada</button>
+      </div>
+      <div class="razmak"></div>
+    </section>
+
+    <section class="ploca">
+      <div class="ploca__glava">
+        <div>
+          <h2>Obaveštenja mejlom</h2>
+          <p class="ploca__opis">Još se ne podešavaju ovde. Za sad se upisuju u fajl <code>data/podesavanja.json</code>
+            (primer je u <code>konfiguracija.primer.json</code>), a lozinka ide u promenljivu okruženja, nikad u fajl.</p>
+        </div>
+      </div>
+      <div class="razmak"></div>
+    </section>
+  </main>
+
+  <dialog class="dijalog" id="dijalog" aria-labelledby="dijalog-naslov">
+    <form method="dialog" class="dijalog__sadrzaj" id="dijalog-forma">
+      <div class="dijalog__glava">
+        <h2 id="dijalog-naslov">Dodaj podatke</h2>
+        <button type="button" class="dugme dugme--tiho dugme--malo" id="dijalog-zatvori" aria-label="Zatvori">✕</button>
+      </div>
+      <div id="dijalog-telo"></div>
+    </form>
+  </dialog>
+
+  <div class="oblacic" id="tooltip" role="tooltip" hidden></div>
+  <div class="obavestenje" id="obavestenje" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

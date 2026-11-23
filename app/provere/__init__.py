@@ -1,3 +1,27 @@
+"""
+Provere: pronalaze probleme u rezultatima modela.
+
+ŠTA JE OVO
+----------
+Glavna funkcija je `proveri_sve(rezultati)`. Prima rezultate (iz čitača,
+korak 2) i vraća spisak nalaza, odnosno pronađenih problema.
+
+Za svaku seriju (model + izvor) radi u dva koraka:
+
+    1. kalibracija.py  NAUČI granice iz normalnog perioda
+    2. provere         UPOREDE ostatak podataka sa tim granicama
+
+Provere su podeljene u tri grupe, svaka u svom fajlu:
+
+    dostupnost.py  da li rezultati stižu     (izostanak, duplikat, greška modela)
+    kvalitet.py    da li su upotrebljivi     (prazne i nemoguće vrednosti)
+    tacnost.py     da li je model dobar      (pristrasnost, drift, skok, pad tačnosti,
+                                             promena odgovora kod kategorija)
+
+Prve dve grupe rade za svaki model. Treća najviše koristi kad postoje
+stvarne vrednosti, ali drift radi i bez njih.
+"""
+
 from datetime import datetime
 
 from app.provere.dostupnost import (
@@ -12,6 +36,7 @@ from app.provere.tacnost import (
     proveri_drift,
     proveri_pad_tacnosti,
     proveri_pristrasnost,
+    proveri_promenu_kategorija,
     proveri_skokove,
 )
 from app.schema import Rezultat
@@ -55,5 +80,6 @@ def proveri_sve(
         nalazi += proveri_drift(serija, g, iskljuci)
         nalazi += proveri_skokove(serija, g, iskljuci)
         nalazi += proveri_pad_tacnosti(serija, g)
+        nalazi += proveri_promenu_kategorija(serija, g)
 
     return sorted(nalazi, key=lambda n: (n.od, n.model, n.izvor))

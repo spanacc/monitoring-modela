@@ -33,9 +33,9 @@ def test_svi_ubaceni_problemi_su_pronadjeni_bez_laznih_uzbuna(seed):
 
 
 def test_bez_stvarnih_vrednosti_i_dalje_radi_sve_sto_moze():
-    # Ako stvarne vrednosti nikad ne dobijemo: pristrasnost, promašen skok
-    # i pad tačnosti ne mogu da se otkriju, ali sve ostalo mora da radi,
-    # uključujući drift, i opet bez lažnih uzbuna.
+    # Ako stvarne vrednosti nikad ne dobijemo: pristrasnost i promašen skok
+    # ne mogu da se otkriju, ali sve ostalo mora da radi, uključujući drift
+    # i pad tačnosti (koji se tada vidi kao promena odgovora), bez lažnih uzbuna.
     rezultati, problemi = simuliraj_sve(seed=0)
     bez_stvarnih = [r.model_copy(update={"stvarna_vrednost": None,
                                          "stvarna_kategorija": None})
@@ -45,7 +45,7 @@ def test_bez_stvarnih_vrednosti_i_dalje_radi_sve_sto_moze():
 
     pronadjeni = {p["tip"] for p in ocena.pronadjeni}
     promaseni = {p["tip"] for p in ocena.promaseni}
-    assert promaseni == {"pristrasnost", "promasen_skok", "pad_tacnosti"}
+    assert promaseni == {"pristrasnost", "promasen_skok"}
     assert {"izostanak", "duplikat", "greska_modela", "prazne_vrednosti",
-            "nemoguca_vrednost", "drift"} <= pronadjeni
+            "nemoguca_vrednost", "drift", "pad_tacnosti"} <= pronadjeni
     assert ocena.lazni == []

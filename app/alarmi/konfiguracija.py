@@ -1,3 +1,32 @@
+"""
+Konfiguracija: sva podešavanja nadzora u jednom JSON fajlu.
+
+ŠTA JE U FAJLU
+--------------
+    izvori       koji fajlovi se prate (i, ako treba, ručno mapiranje kolona)
+    provere      osetljivost (rezerva) za sve modele
+    modeli       posebna osetljivost za pojedinačne modele, ako treba
+    kanali       kuda se šalju obaveštenja (ekran, dnevnik, mejl, poruka)
+    slanje       koji nivo ozbiljnosti ide na koje kanale
+    zona         vremenska zona za čitanje fajlova i za vremena u porukama
+    baza         adresa baze u kojoj se čuvaju rezultati i alarmi
+    dana_provere koliko poslednjih dana se proverava
+
+Primer je u `konfiguracija.primer.json` u glavnom folderu projekta.
+
+ZAŠTO FAJL, A NE KOD
+--------------------
+Princip iz plana: podešava se, ne programira. Da bi se dodao nov fajl za
+praćenje, promenio primalac mejla ili smanjio broj alarma za jedan model,
+menja se samo ovaj fajl.
+
+PROVERA
+-------
+Fajl se proverava pri učitavanju (pydantic). Ako nešto ne valja, npr.
+kanal koji ne postoji ili pogrešno napisano polje, aplikacija odmah javlja
+jasnu grešku, umesto da se pokvari kasnije, usred noći.
+"""
+
 import json
 import os
 from pathlib import Path
@@ -16,9 +45,31 @@ class Strogo(BaseModel):
 
 
 class Izvor(Strogo):
-    putanja: Path  # CSV fajl sa rezultatima
+    # CSV fajl sa rezultatima. Može i sa zvezdicom, npr. "data/rezultati/*.csv":
+    # tada se prate svi takvi fajlovi (uz zvezdicu obavezno zadati i model).
+    putanja: Path
     model: str | None = None  # naziv modela; podrazumevano ime fajla
-    mapiranje: Path | None = None  # ručno mapiranje kolona (korak 2)
+    mapiranje: Path | None = None  # ručno mapiranje kolona u posebnom JSON fajlu (korak 2)
+    # Isto to, ali upisano ovde: koje polje je koja kolona, npr.
+    # {"vreme": "dteday", "doba_dana": "hr", "vrednost": "cnt"}. Ovo upisuje
+    # dashboard kad se podaci dodaju sa stranice (korak 7).
+    polja: dict[str, str] | None = None
+    redosled_datuma: Literal["dm", "md"] = "dm"  # za datume sa kosim crtama
+    # Široka tabela: svaka od ovih kolona je poseban izvor (npr. senzor).
+    # ["sve"] = sve kolone sa brojevima.
+    kolone: list[str] | None = None
+    # Stari podaci (proba, arhiva): "sada" je vreme poslednjeg rezultata, pa
+    # aplikacija ne javlja da model ćuti godinama. U pravom radu je False.
+    istorijski: bool = False
+
+    def napravi_mapiranje(self):
+        """Mapiranje kolona iz podešavanja, ako je zadato (inače se prepoznaje samo)."""
+        from app.prepoznavanje import Mapiranje
+        if self.polja:
+            return Mapiranje.iz_recnika({"polja": self.polja, "redosled_datuma": self.redosled_datuma})
+        if self.mapiranje:
+            return Mapiranje.ucitaj(self.mapiranje)
+        return None
 
 
 class OsetljivostModela(Strogo):
@@ -70,6 +121,17 @@ class Konfiguracija(Strogo):
                     )
         return self
 
+    def istorijski_modeli(self) -> set[str]:
+        """Modeli čiji su izvori označeni kao stari podaci."""
+        return {i.model or i.putanja.stem for i in self.izvori if i.istorijski}
+
+    def sacuvaj(self, putanja: Path) -> None:
+        """Upisuje podešavanja u JSON fajl (samo ono što nije podrazumevano)."""
+        podaci = self.model_dump(mode="json", exclude_defaults=True)
+        podaci["izvori"] = [i.model_dump(mode="json", exclude_defaults=True) for i in self.izvori]
+        Path(putanja).parent.mkdir(parents=True, exist_ok=True)
+        Path(putanja).write_text(json.dumps(podaci, ensure_ascii=False, indent=2), encoding="utf-8")
+
     def podesavanja_za(self, model: str) -> Podesavanja:
         """Opšta osetljivost, a preko nje posebna za ovaj model, ako postoji."""
         vrednosti = self.provere.model_dump(exclude_none=True)
@@ -105,6 +167,17 @@ def procitaj_tajnu(promenljiva: str, kanal: str) -> str:
             f"postavljena. Na Mac-u/Linux-u: export {promenljiva}=..."
         )
     return vrednost
+
+
+# Podešavanja koja dashboard sam pravi i menja kad se podaci dodaju sa stranice.
+PODRAZUMEVANA_PUTANJA = Path("data/podesavanja.json")
+
+
+def ucitaj_ili_prazna(putanja: Path = PODRAZUMEVANA_PUTANJA) -> Konfiguracija:
+    """Podešavanja iz fajla, a ako fajla još nema: prazna (bez ijednog izvora)."""
+    if Path(putanja).exists():
+        return ucitaj_konfiguraciju(putanja)
+    return Konfiguracija(izvori=[])
 
 
 def ucitaj_konfiguraciju(putanja: Path) -> Konfiguracija:
